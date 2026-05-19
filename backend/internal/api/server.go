@@ -1,0 +1,62 @@
+// Package api expõe o servidor HTTP da plataforma.
+package api
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+
+	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/storage"
+)
+
+// Server agrega dependências de runtime da API.
+type Server struct {
+	cfg config.Config
+	db  *storage.Pool
+	mux *chi.Mux
+}
+
+// NewServer constrói o servidor com rotas registradas.
+func NewServer(cfg config.Config, db *storage.Pool) *Server {
+	s := &Server{cfg: cfg, db: db, mux: chi.NewRouter()}
+	s.routes()
+	return s
+}
+
+// ServeHTTP delega ao chi.Mux para satisfazer http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
+}
+
+func (s *Server) routes() {
+	r := s.mux
+
+	r.Use(middleware.RealIP)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:4200"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
+	r.Get("/healthz", s.handleHealthz())
+	r.Get("/readyz", s.handleReadyz())
+
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/projects", s.handleListProjects())
+		r.Get("/projects/{projectId}/metrics", s.handleProjectMetrics())
+	})
+
+	r.Route("/webhooks", func(r chi.Router) {
+		r.Post("/gitlab", s.handleGitLabWebhook())
+		r.Post("/jira", s.handleJiraWebhook())
+	})
+}
