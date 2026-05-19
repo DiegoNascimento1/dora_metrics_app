@@ -1,0 +1,197 @@
+openapi: 3.1.0
+info:
+  title: DORA Metrics App API
+  version: 0.1.0
+  description: |
+    API interna da plataforma DORA Metrics.
+    Contrato fonte para geração de tipos TypeScript do frontend.
+  contact:
+    name: Time DORA
+servers:
+  - url: http://localhost:8080
+    description: dev local
+  - url: https://dora.example.internal
+    description: produção (placeholder)
+
+tags:
+  - name: health
+  - name: metrics
+  - name: projects
+  - name: webhooks
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /readyz:
+    get:
+      tags: [health]
+      summary: Readiness probe (checa DB + Redis)
+      responses:
+        "200":
+          description: pronto
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: não pronto
+
+  /api/v1/projects:
+    get:
+      tags: [projects]
+      summary: Lista projetos monitorados
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /api/v1/projects/{projectId}/metrics:
+    get:
+      tags: [metrics]
+      summary: Métricas DORA do projeto
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoraMetrics"
+        "404":
+          description: projeto não encontrado
+
+  /webhooks/gitlab:
+    post:
+      tags: [webhooks]
+      summary: Receptor de webhook do GitLab
+      parameters:
+        - in: header
+          name: X-Gitlab-Token
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Gitlab-Event
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: aceito
+        "401":
+          description: token inválido
+
+  /webhooks/jira:
+    post:
+      tags: [webhooks]
+      summary: Receptor de webhook do Jira
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: aceito
+
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+
+    Project:
+      type: object
+      required: [id, slug, name, pathWithNamespace]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        pathWithNamespace:
+          type: string
+        teamId:
+          type: string
+          format: uuid
+          nullable: true
+        active:
+          type: boolean
+
+    DoraMetrics:
+      type: object
+      required: [projectId, windowDays, computedAt, deploymentFrequency, leadTimeMedianSeconds, changeFailureRate, mttrMeanSeconds, classification, sampleSize]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        windowDays:
+          type: integer
+          enum: [7, 30, 90]
+        computedAt:
+          type: string
+          format: date-time
+        deploymentFrequency:
+          type: number
+          description: deploys por dia
+        leadTimeMedianSeconds:
+          type: integer
+          format: int64
+          nullable: true
+        changeFailureRate:
+          type: number
+          description: 0.0 a 1.0
+          nullable: true
+        mttrMeanSeconds:
+          type: integer
+          format: int64
+          nullable: true
+        classification:
+          type: string
+          enum: [elite, high, medium, low, insufficient_data]
+        sampleSize:
+          type: integer

@@ -1,0 +1,75 @@
+name: dora-metrics
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dora}
+      POSTGRES_USER: ${POSTGRES_USER:-dora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dora}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dora} -d ${POSTGRES_DB:-dora}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      target: api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      WORKER_REDIS_ADDR: redis:6379
+    ports:
+      - "8080:8080"
+    profiles: ["full"]
+
+  worker:
+    build:
+      context: ./backend
+      target: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      WORKER_REDIS_ADDR: redis:6379
+    profiles: ["full"]
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "4200:80"
+    profiles: ["full"]
+
+volumes:
+  postgres-data:
