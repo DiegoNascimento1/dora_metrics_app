@@ -1,0 +1,46 @@
+.claude/*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Secrets / env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Go
+backend/bin/
+backend/coverage.out
+backend/coverage.html
+backend/*.test
+backend/dist/
+backend/vendor/
+
+# sqlc generated (gera no build/CI; não versionar)
+backend/internal/storage/queries/
+
+# Node / Angular
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
+frontend/.nx/
+frontend/coverage/
+frontend/src/app/core/api/generated/
+
+# Docker
+**/postgres-data/
+
+# Logs
+*.log
+logs/
