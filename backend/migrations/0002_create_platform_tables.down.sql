@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS platform.classification_threshold;
+DROP TABLE IF EXISTS platform.deployment_incident_link;
+DROP TABLE IF EXISTS platform.incident;
+DROP TABLE IF EXISTS platform.deployment_mr_link;
+DROP TABLE IF EXISTS platform.deployment;
+DROP TABLE IF EXISTS platform.merge_request;
+DROP TABLE IF EXISTS platform.environment;
+DROP TABLE IF EXISTS platform.project;
+DROP TABLE IF EXISTS platform.team;
+DROP TABLE IF EXISTS platform.source_instance;
+DROP TABLE IF EXISTS platform.tenant;
