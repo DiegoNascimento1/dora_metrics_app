@@ -1,0 +1,2 @@
+# Coloque aqui arquivos .sql consumidos pelo sqlc para gerar queries Go.
+# Exemplo: projects.sql, deployments.sql, incidents.sql
