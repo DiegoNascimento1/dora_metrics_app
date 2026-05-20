@@ -62,7 +62,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** stakeholders conseguem abrir o dashboard, comparar 2 times, e identificar visualmente uma piora. Hoje conseguem ver 1 projeto por vez com tiles + curva + drill-down.
 
-## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — Pendente
+## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — 🟡 Backend entregue, falta UI
 
 **Objetivo:** atribuir cada evento DORA (commit, MR, incident, deployment) a uma **pessoa real**, não a um username solto. Sem isso, Alice no GitLab (`alice_dev`) e Alice no Jira (`alice@acme.com`) viram dois "autores" diferentes, distorcendo per-person analytics e quem deve ser notificado em alertas.
 
@@ -83,16 +83,16 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 
 ### Itens
 
-- [ ] Migration 0006 — tabelas `platform.person` e `platform.person_identity`
-- [ ] Coletor GitLab: `ListProjectMembers` em `internal/collector/gitlab/client.go` + upsert em `person_identity` (auto-cria `person` se primeiro avistamento)
-- [ ] Coletor Jira: chamada a `/rest/api/3/users/search` + upsert idêntico (com accountId opaco como `external_id`)
-- [ ] Backfill: usernames já vistos em `merge_request.author_username`, `deployment.triggered_by` e `incident` ganham linha em `person_identity` (sem `person_id` ainda — fica "unlinked")
-- [ ] Auto-match heurístico: tenta casar identities por email exato e por username similar (case-insensitive, exact). Sugere — não decide — para revisão humana
-- [ ] Endpoint REST `/api/v1/people` (list) + `/api/v1/people/{id}/link` (POST associa uma identidade não-linkada a uma person)
-- [ ] CLI: `cli people list-unlinked --tenant X`, `cli people link --identity ID --person UUID`
+- [x] Migration 0006 — tabelas `platform.person` e `platform.person_identity`
+- [ ] Coletor GitLab: `ListProjectMembers` em `internal/collector/gitlab/client.go` + upsert em `person_identity` (depende de token GitLab real)
+- [ ] Coletor Jira: chamada a `/rest/api/3/users/search` + upsert idêntico (depende de token Jira real)
+- [x] Backfill: usernames de `merge_request.author_username` e `deployment.triggered_by` → `person_identity` unlinked (`cli people backfill`)
+- [x] Auto-match heurístico: pacote `internal/identities` com email_exact (score 1.0) + username_exact (score 0.7); 97% cobertura de testes
+- [ ] Endpoint REST `/api/v1/people` (list) + `/api/v1/people/{id}/link` (POST) — só CLI por enquanto
+- [x] CLI: `cli people backfill | list-unlinked | create | link | automatch --tenant X`
 - [ ] Frontend: tela "Pessoas" com lista de unlinked + UI de merge (drag-and-drop entre identidades)
 - [ ] Refactor: `merge_request.author_username`, `deployment.triggered_by` etc passam a também guardar `person_id` (nullable enquanto unlinked)
-- [ ] Métricas por pessoa: novo endpoint `/api/v1/people/{id}/metrics?window=30d` (Lead Time pessoal, frequência de incidents vinculados, etc — usar com cautela; ver caveat abaixo)
+- [ ] Métricas por pessoa: novo endpoint `/api/v1/people/{id}/metrics?window=30d` (Lead Time pessoal, frequência de incidents vinculados — usar com cautela; ver caveat abaixo)
 
 **Caveat ético/cultural:** DORA é pensado para times, não indivíduos. Métricas por pessoa servem para identificar quem precisa de mentoria, NÃO para ranking punitivo. Documentar isso em [docs/01-dora-metrics.md](01-dora-metrics.md) e marcar a tela de métricas pessoais como "modo admin/coach", não dashboard público.
 
