@@ -62,6 +62,42 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** stakeholders conseguem abrir o dashboard, comparar 2 times, e identificar visualmente uma piora. Hoje conseguem ver 1 projeto por vez com tiles + curva + drill-down.
 
+## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — Pendente
+
+**Objetivo:** atribuir cada evento DORA (commit, MR, incident, deployment) a uma **pessoa real**, não a um username solto. Sem isso, Alice no GitLab (`alice_dev`) e Alice no Jira (`alice@acme.com`) viram dois "autores" diferentes, distorcendo per-person analytics e quem deve ser notificado em alertas.
+
+### Modelo de dados (novo)
+
+```
+person                      Identidade canônica.
+├── id, tenant_id, display_name, primary_email, avatar_url
+└── created_at
+
+person_identity             Vínculos com sistemas externos. N por pessoa.
+├── person_id, source_instance_id, kind (gitlab|jira)
+├── external_id              GitLab user ID (int) / Jira accountId (opaque)
+├── external_username        gitlab "alice_dev" / jira "alice@acme.com"
+├── external_email           opcional, ajuda no auto-match
+└── linked_at, linked_by
+```
+
+### Itens
+
+- [ ] Migration 0006 — tabelas `platform.person` e `platform.person_identity`
+- [ ] Coletor GitLab: `ListProjectMembers` em `internal/collector/gitlab/client.go` + upsert em `person_identity` (auto-cria `person` se primeiro avistamento)
+- [ ] Coletor Jira: chamada a `/rest/api/3/users/search` + upsert idêntico (com accountId opaco como `external_id`)
+- [ ] Backfill: usernames já vistos em `merge_request.author_username`, `deployment.triggered_by` e `incident` ganham linha em `person_identity` (sem `person_id` ainda — fica "unlinked")
+- [ ] Auto-match heurístico: tenta casar identities por email exato e por username similar (case-insensitive, exact). Sugere — não decide — para revisão humana
+- [ ] Endpoint REST `/api/v1/people` (list) + `/api/v1/people/{id}/link` (POST associa uma identidade não-linkada a uma person)
+- [ ] CLI: `cli people list-unlinked --tenant X`, `cli people link --identity ID --person UUID`
+- [ ] Frontend: tela "Pessoas" com lista de unlinked + UI de merge (drag-and-drop entre identidades)
+- [ ] Refactor: `merge_request.author_username`, `deployment.triggered_by` etc passam a também guardar `person_id` (nullable enquanto unlinked)
+- [ ] Métricas por pessoa: novo endpoint `/api/v1/people/{id}/metrics?window=30d` (Lead Time pessoal, frequência de incidents vinculados, etc — usar com cautela; ver caveat abaixo)
+
+**Caveat ético/cultural:** DORA é pensado para times, não indivíduos. Métricas por pessoa servem para identificar quem precisa de mentoria, NÃO para ranking punitivo. Documentar isso em [docs/01-dora-metrics.md](01-dora-metrics.md) e marcar a tela de métricas pessoais como "modo admin/coach", não dashboard público.
+
+**Critério de saída:** dado um deploy GitLab disparado por `alice_dev` e um incident Jira aberto por `alice@acme.com`, o sistema atribui ambos à **mesma** pessoa Alice. Métricas DORA do time não dobram contagem.
+
 ## Fase 4 — Alertas e múltiplos tenants — Pendente
 
 **Objetivo:** operacionalizar como ferramenta de uso diário.
@@ -99,6 +135,57 @@ A partir daqui, evolução contínua sem big bangs. Backlog:
 ## Trilhas transversais
 
 Não pertencem a uma fase específica; evoluem em paralelo.
+
+### Design UX/UI — corporativo com pegada de gamificação — Pendente
+
+**Princípio:** a plataforma é interna e tem uma audiência mista (engenharia, EM, direção). O visual precisa transmitir **confiança e seriedade corporativa** quando exposto em reunião de C-level, mas **engajar o time de eng** no dia-a-dia — DORA é um espelho, e times só olham num espelho que dá feedback emocional.
+
+#### Identidade visual (base corporativa)
+
+- [ ] **Design system** com tokens versionados (cores, espaçamento, tipografia). Base Material Design 3 + customização da paleta empresarial
+- [ ] Paleta: neutros sóbrios (azul-escuro corporativo, cinza-grafite, off-white) + **acentos vivos reservados pra status** (Elite verde, High azul, Medium âmbar, Low vermelho)
+- [ ] Tipografia: pareamento sem-serifa moderna (Inter / IBM Plex Sans) com mono pra SHAs/IDs (JetBrains Mono)
+- [ ] Tema **claro + escuro** com persistência por usuário; transição suave
+- [ ] WCAG AA garantido (contraste 4.5:1+ em todo texto, foco visível em todo interativo)
+- [ ] Iconografia consistente — Material Symbols (variable, peso ajustável)
+- [ ] Empty states, loading skeletons e error states desenhados (não placeholders genéricos do Material)
+- [ ] Logo + favicon + open graph (apresentável em link compartilhado)
+
+#### Camada de gamificação (engajamento)
+
+Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunca métrica punitiva.
+
+- [ ] **Tier badges animados** — chip Elite/High/Medium/Low com micro-interação na atualização (não piscar, só "respirar" sutil). Cor + textura + ícone para acessibilidade além da cor
+- [ ] **Streaks** — "23 dias sem Change Failure" com fogo emoji ou ícone de chama; quebra de streak mostra duração anterior + botão "retomar"
+- [ ] **Achievements / conquistas** (desbloqueáveis por time):
+    - 🚀 *First Elite Month* — primeiro mês inteiro classificação Elite combinada
+    - 🛡️ *100 Green Days* — 100 dias sem incident production-impacting
+    - ⚡ *Speed Demon* — Lead Time mediano < 1h por 4 semanas consecutivas
+    - 🔁 *Recovery Master* — MTTR < 1h em 5 incidents consecutivos
+    - 📈 *Most Improved* — maior salto de tier no trimestre
+- [ ] **Leaderboard entre times** do mesmo tenant (opt-in por tenant) — comparação por tier combinado e por métrica individual. Sem punição: bottom-team aparece como "in growth"
+- [ ] **Progress bars** mostrando "quão perto" o time está do próximo tier (ex: "+0.12 deploys/dia para Elite")
+- [ ] **Weekly digest** — card semanal: "essa semana 12 deploys, 0 incidents, +1 tier em LT" — formato compartilhável (PNG/Slack-friendly)
+- [ ] **Team identity** — cada time escolhe nome, cor, mascote/emoji opcional (afeta o leaderboard e os cards)
+- [ ] **Micro-animações** parceiras de eventos: deploy success (✓ verde sutil), tier-up (confete discreto SVG, < 800ms), incident closed (badge fade-in)
+
+#### Discoverability e profundidade
+
+- [ ] **Onboarding tour** primeira visita (4 steps: o que é DORA, leitura de tile, tour da curva, drill-down)
+- [ ] **Tooltip explicativo** em cada métrica com link pra [docs/01-dora-metrics.md](01-dora-metrics.md) ancorado na seção
+- [ ] **"Por que esse tier?"** — clicar no chip de classificação abre painel mostrando os 4 valores + cutoffs configurados, com destaque do que rebaixou
+- [ ] **Compare mode** — botão "comparar" pega 2-4 times/projetos lado-a-lado (gráficos sobrepostos + delta destacado)
+- [ ] **Print-friendly** view para exportar relatório mensal em PDF (CSS print + watermark)
+
+#### Anti-padrões explicitamente evitados
+
+- ❌ Pontuação numérica individual (XP do desenvolvedor) — DORA é métrica de time
+- ❌ Notificações de "alguém te ultrapassou" — competição saudável é entre times, não entre pessoas
+- ❌ Loot boxes / surpresas — corporativo demanda previsibilidade
+- ❌ Som / efeitos de áudio sem opt-in — ambiente de trabalho silencioso por default
+- ❌ Mascotes 3D ou ilustrações infantilizadas — manter visual sóbrio
+
+**Critério de saída da trilha:** stakeholder de C-level abre o dashboard sem treino e identifica em < 30s qual time precisa de atenção; engenheiros conferem o dashboard ≥ 1x/semana voluntariamente (medido por DAU/WAU do próprio app).
 
 ### Testes e qualidade — 🟡 Iniciado
 
