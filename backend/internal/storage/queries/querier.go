@@ -23,6 +23,7 @@ type Querier interface {
 	// finished_at está em (incident.created_at - lookback, incident.created_at].
 	// Usado pelo time-window linking de CFR (default lookback = 24h).
 	FindDeploymentForIncident(ctx context.Context, arg FindDeploymentForIncidentParams) (uuid.UUID, error)
+	GetClassificationThreshold(ctx context.Context, tenantID uuid.UUID) (PlatformClassificationThreshold, error)
 	GetFirstSourceInstanceForTenantKind(ctx context.Context, arg GetFirstSourceInstanceForTenantKindParams) (PlatformSourceInstance, error)
 	// Encontra o projeto pelo external_id assumindo source kind='gitlab'.
 	// Em multi-tenant com múltiplos GitLab e overlap de IDs, retorna o mais antigo.
@@ -65,6 +66,7 @@ type Querier interface {
 	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
 	MarkRawEventProcessed(ctx context.Context, arg MarkRawEventProcessedParams) error
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
+	UpsertClassificationThreshold(ctx context.Context, arg UpsertClassificationThresholdParams) (PlatformClassificationThreshold, error)
 	UpsertDeployment(ctx context.Context, arg UpsertDeploymentParams) (PlatformDeployment, error)
 	UpsertDeploymentIncidentLink(ctx context.Context, arg UpsertDeploymentIncidentLinkParams) error
 	UpsertDeploymentMRLink(ctx context.Context, arg UpsertDeploymentMRLinkParams) error

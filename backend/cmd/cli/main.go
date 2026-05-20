@@ -20,6 +20,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dora-metrics-app/backend/internal/calculator"
 	"github.com/dora-metrics-app/backend/internal/collector"
 	"github.com/dora-metrics-app/backend/internal/config"
 	"github.com/dora-metrics-app/backend/internal/storage"
@@ -94,6 +96,17 @@ func main() {
 			die("unknown subcommand: compute %s", sub)
 		}
 		computeNow(ctx, q, cfg, rest)
+	case "thresholds":
+		switch sub {
+		case "get":
+			thresholdsGet(ctx, q, rest)
+		case "set":
+			thresholdsSet(ctx, q, rest)
+		case "defaults":
+			emitJSON(calculator.DefaultThresholds())
+		default:
+			die("unknown subcommand: thresholds %s", sub)
+		}
 	default:
 		usage()
 		os.Exit(1)
@@ -291,6 +304,76 @@ func collectNow(ctx context.Context, q *queries.Queries, cfg config.Config, args
 	})
 }
 
+// ---- thresholds ----
+
+func thresholdsGet(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("thresholds get", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug")
+	_ = fs.Parse(args)
+	if *tenantSlug == "" {
+		die("thresholds get: --tenant required")
+	}
+	tenant, err := q.GetTenantBySlug(ctx, *tenantSlug)
+	if err != nil {
+		die("get tenant: %v", err)
+	}
+	row, err := q.GetClassificationThreshold(ctx, tenant.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fmt.Fprintln(os.Stderr, "no override for tenant; using defaults")
+		emitJSON(calculator.DefaultThresholds())
+		return
+	}
+	if err != nil {
+		die("get thresholds: %v", err)
+	}
+	t, err := calculator.FromJSON(row.Config)
+	if err != nil {
+		die("decode thresholds: %v", err)
+	}
+	emitJSON(t)
+}
+
+func thresholdsSet(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("thresholds set", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug")
+	configFile := fs.String("file", "-", "JSON file with thresholds (or - for stdin)")
+	_ = fs.Parse(args)
+	if *tenantSlug == "" {
+		die("thresholds set: --tenant required")
+	}
+
+	var raw []byte
+	var err error
+	if *configFile == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(*configFile)
+	}
+	if err != nil {
+		die("read config: %v", err)
+	}
+
+	// Valida o JSON contra a struct antes de gravar.
+	if _, err := calculator.FromJSON(raw); err != nil {
+		die("invalid thresholds JSON: %v", err)
+	}
+
+	tenant, err := q.GetTenantBySlug(ctx, *tenantSlug)
+	if err != nil {
+		die("get tenant: %v", err)
+	}
+
+	row, err := q.UpsertClassificationThreshold(ctx,
+		queries.UpsertClassificationThresholdParams{
+			TenantID: tenant.ID,
+			Config:   raw,
+		})
+	if err != nil {
+		die("upsert thresholds: %v", err)
+	}
+	emitJSON(row)
+}
+
 // ---- compute now ----
 
 func computeNow(ctx context.Context, q *queries.Queries, cfg config.Config, args []string) {
@@ -375,5 +458,8 @@ Usage:
   cli project add --tenant X --source N --external-id ID --path group/repo
   cli project list
   cli collect now --project UUID
-  cli compute now --project UUID --window 30`)
+  cli compute now --project UUID --window 30
+  cli thresholds get --tenant X
+  cli thresholds set --tenant X [--file thresholds.json | - for stdin]
+  cli thresholds defaults`)
 }

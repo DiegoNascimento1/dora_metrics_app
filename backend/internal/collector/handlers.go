@@ -407,11 +407,23 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		mttrMeanS = &v
 	}
 
+	thresholds := calculator.DefaultThresholds()
+	if row, err := q.GetClassificationThreshold(ctx, project.TenantID); err == nil {
+		if loaded, err := calculator.FromJSON(row.Config); err == nil {
+			thresholds = loaded
+		} else {
+			log.Warn().Err(err).Str("tenant_id", project.TenantID.String()).
+				Msg("invalid classification_threshold config; using defaults")
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		log.Warn().Err(err).Msg("load thresholds; using defaults")
+	}
+
 	classification := calculator.WorstOf(
-		calculator.ClassifyDeploymentFrequency(df),
-		calculator.ClassifyLeadTime(leadTimeMedianS),
-		calculator.ClassifyChangeFailureRate(cfrFloat),
-		calculator.ClassifyMTTR(mttrMeanS),
+		calculator.ClassifyDeploymentFrequency(df, thresholds),
+		calculator.ClassifyLeadTime(leadTimeMedianS, thresholds),
+		calculator.ClassifyChangeFailureRate(cfrFloat, thresholds),
+		calculator.ClassifyMTTR(mttrMeanS, thresholds),
 	)
 
 	dfNumeric, err := numericFromFloat(df)
