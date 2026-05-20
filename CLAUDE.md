@@ -45,3 +45,4 @@ A pasta [docs/](docs/) contém o estudo profundo que fundamenta as decisões de 
 - Não introduza dependências de stack sem registrar a decisão em um ADR dentro de [docs/adr/](docs/adr/).
 - Não invente endpoints do GitLab/Jira — sempre confira contra [docs/03-gitlab-integration.md](docs/03-gitlab-integration.md) e [docs/04-jira-integration.md](docs/04-jira-integration.md) ou a doc oficial.
 - **Commits:** não incluir trailer `Co-Authored-By` apontando para Claude/IA. Os commits devem ficar em nome do autor humano apenas.
+- **Permissões:** quando o usuário diz "siga", "continuar", "pode seguir" ou similar, é autorização ampla para executar tool calls reversíveis (`docker compose`, `psql`, `git add/commit/push`, edição de arquivos). Não pausar para perguntar antes de cada chamada. Só pedir confirmação para ações irreversíveis fora do escopo: drop de banco, push --force, etc.
