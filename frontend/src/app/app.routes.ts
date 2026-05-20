@@ -21,6 +21,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'people',
+    loadComponent: () =>
+      import('./features/people/people.component').then(
+        (m) => m.PeopleComponent,
+      ),
+  },
+  {
     path: '**',
     redirectTo: 'dashboard',
   },

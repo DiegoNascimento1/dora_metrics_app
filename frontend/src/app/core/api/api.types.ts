@@ -46,3 +46,41 @@ export interface Deployment {
   finishedAt: string | null;
   environmentName: string;
 }
+
+export interface Identity {
+  id: string;
+  kind: 'gitlab' | 'jira';
+  externalId: string | null;
+  externalUsername: string;
+  externalEmail: string | null;
+  personId: string | null;
+  linkedAt: string | null;
+  linkedBy: string | null;
+}
+
+export interface Person {
+  id: string;
+  displayName: string;
+  primaryEmail: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface PersonWithIdentities extends Person {
+  identities: Identity[];
+}
+
+export interface MergeSuggestion {
+  a: Identity;
+  b: Identity;
+  reason: 'email_exact' | 'username_exact';
+  score: number;
+}
+
+export interface CreatePersonRequest {
+  tenant: string;
+  displayName: string;
+  primaryEmail?: string;
+  avatarUrl?: string;
+  identityIds?: string[];
+}
