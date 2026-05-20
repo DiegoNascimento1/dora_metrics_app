@@ -11,9 +11,10 @@ import (
 
 // Tipos de tasks. Stringly-typed para fácil debug no asynqmon.
 const (
-	TaskScanActiveProjects   = "scan:active_projects"
-	TaskCollectGitlab        = "collect:gitlab:deployments"
-	TaskComputeMetricWindow  = "compute:metric_window"
+	TaskScanActiveProjects  = "scan:active_projects"
+	TaskCollectGitlab       = "collect:gitlab:deployments"
+	TaskCollectJira         = "collect:jira:incidents"
+	TaskComputeMetricWindow = "compute:metric_window"
 )
 
 // Filas (declaradas no asynq.Config).
@@ -36,6 +37,24 @@ func NewCollectGitlabTask(projectID uuid.UUID) (*asynq.Task, error) {
 	}
 	return asynq.NewTask(
 		TaskCollectGitlab, payload,
+		asynq.Queue(QueueCollect),
+		asynq.MaxRetry(3),
+	), nil
+}
+
+// CollectJiraPayload é o payload da task collect:jira:incidents.
+type CollectJiraPayload struct {
+	ProjectID uuid.UUID `json:"project_id"`
+}
+
+// NewCollectJiraTask constrói a task para enfileirar.
+func NewCollectJiraTask(projectID uuid.UUID) (*asynq.Task, error) {
+	payload, err := json.Marshal(CollectJiraPayload{ProjectID: projectID})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(
+		TaskCollectJira, payload,
 		asynq.Queue(QueueCollect),
 		asynq.MaxRetry(3),
 	), nil

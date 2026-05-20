@@ -63,6 +63,59 @@ func ClassifyLeadTime(medianSeconds *int64) string {
 	}
 }
 
+// ClassifyChangeFailureRate classifica o CFR (0.0 a 1.0) nos tiers DORA.
+//
+// Faixas (DORA Report 2023/2024):
+//   - Elite:  0 – 5%
+//   - High:   5 – 10%
+//   - Medium: 10 – 20%
+//   - Low:    >= 20%
+//   - InsufficientData: nil
+func ClassifyChangeFailureRate(rate *float64) string {
+	if rate == nil {
+		return TierInsufficientData
+	}
+	switch {
+	case *rate <= 0.05:
+		return TierElite
+	case *rate <= 0.10:
+		return TierHigh
+	case *rate <= 0.20:
+		return TierMedium
+	default:
+		return TierLow
+	}
+}
+
+// ClassifyMTTR classifica o MTTR (segundos) nos tiers DORA.
+//
+// Faixas (DORA Report 2023/2024):
+//   - Elite:  < 1 hora    (3600s)
+//   - High:   < 1 dia     (86400s)
+//   - Medium: < 1 semana  (604800s)
+//   - Low:    >= 1 semana
+//   - InsufficientData: nil
+func ClassifyMTTR(meanSeconds *int64) string {
+	if meanSeconds == nil {
+		return TierInsufficientData
+	}
+	const (
+		hour int64 = 3600
+		day        = 24 * hour
+		week       = 7 * day
+	)
+	switch {
+	case *meanSeconds < hour:
+		return TierElite
+	case *meanSeconds < day:
+		return TierHigh
+	case *meanSeconds < week:
+		return TierMedium
+	default:
+		return TierLow
+	}
+}
+
 // WorstOf devolve o pior tier (mais baixo) entre as classificações fornecidas.
 // "Insufficient data" é tratado como ausente: se TODOS forem
 // insufficient_data, retorna insufficient_data; caso contrário, ignora os

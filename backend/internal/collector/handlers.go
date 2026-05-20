@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/dora-metrics-app/backend/internal/calculator"
 	"github.com/dora-metrics-app/backend/internal/collector/gitlab"
+	"github.com/dora-metrics-app/backend/internal/collector/jira"
 	"github.com/dora-metrics-app/backend/internal/secret"
 	"github.com/dora-metrics-app/backend/internal/storage"
 	"github.com/dora-metrics-app/backend/internal/storage/queries"
@@ -33,8 +35,13 @@ type Handlers struct {
 func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskScanActiveProjects, h.HandleScanActiveProjects)
 	mux.HandleFunc(TaskCollectGitlab, h.HandleCollectGitlab)
+	mux.HandleFunc(TaskCollectJira, h.HandleCollectJira)
 	mux.HandleFunc(TaskComputeMetricWindow, h.HandleComputeMetricWindow)
 }
+
+// IncidentLinkLookback é a janela usada para atribuir um incident ao deploy
+// que o "causou". Padrão DORA: 24h. Configurável por projeto no futuro.
+const IncidentLinkLookback = 24 * time.Hour
 
 // HandleScanActiveProjects roda no tick periódico e enfileira uma task
 // de coleta por projeto ativo.
@@ -47,21 +54,33 @@ func (h *Handlers) HandleScanActiveProjects(ctx context.Context, _ *asynq.Task) 
 	}
 
 	for _, p := range projects {
-		task, err := NewCollectGitlabTask(p.ID)
-		if err != nil {
-			log.Error().Err(err).Str("project_id", p.ID.String()).Msg("build collect task")
-			continue
+		// GitLab: sempre enfileira (toda fonte de deployments).
+		if task, err := NewCollectGitlabTask(p.ID); err != nil {
+			log.Error().Err(err).Str("project_id", p.ID.String()).Msg("build gitlab collect task")
+		} else if info, err := h.Asynq.EnqueueContext(ctx, task); err != nil {
+			log.Error().Err(err).Str("project_id", p.ID.String()).Msg("enqueue gitlab collect")
+		} else {
+			log.Info().
+				Str("project_id", p.ID.String()).
+				Str("path", p.PathWithNamespace).
+				Str("task_id", info.ID).
+				Msg("enqueued collect:gitlab:deployments")
 		}
-		info, err := h.Asynq.EnqueueContext(ctx, task)
-		if err != nil {
-			log.Error().Err(err).Str("project_id", p.ID.String()).Msg("enqueue collect task")
-			continue
+
+		// Jira: enfileira só se o projeto tiver jira_project_keys configurado.
+		if len(p.JiraProjectKeys) > 0 {
+			if task, err := NewCollectJiraTask(p.ID); err != nil {
+				log.Error().Err(err).Str("project_id", p.ID.String()).Msg("build jira collect task")
+			} else if info, err := h.Asynq.EnqueueContext(ctx, task); err != nil {
+				log.Error().Err(err).Str("project_id", p.ID.String()).Msg("enqueue jira collect")
+			} else {
+				log.Info().
+					Str("project_id", p.ID.String()).
+					Str("path", p.PathWithNamespace).
+					Str("task_id", info.ID).
+					Msg("enqueued collect:jira:incidents")
+			}
 		}
-		log.Info().
-			Str("project_id", p.ID.String()).
-			Str("path", p.PathWithNamespace).
-			Str("task_id", info.ID).
-			Msg("enqueued collect:gitlab:deployments")
 	}
 	return nil
 }
@@ -310,11 +329,41 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		leadTimeMedianS = &v
 	}
 
-	// Classificação combinada: pior tier entre DF e Lead Time
-	// (CFR e MTTR entram aqui quando implementados na Fase 2/B).
+	// CFR = (deploys com >= 1 incident vinculado) / total
+	cfrRow, err := q.ChangeFailureRateInWindow(ctx, queries.ChangeFailureRateInWindowParams{
+		ProjectID:     project.ID,
+		FinishedSince: pgTime(since),
+	})
+	if err != nil {
+		return fmt.Errorf("compute cfr: %w", err)
+	}
+	var cfrNumeric pgtype.Numeric
+	var cfrFloat *float64
+	if cfrRow.SampleSize > 0 {
+		v := coerceFloat(cfrRow.Cfr)
+		cfrFloat = &v
+		cfrNumeric, _ = numericFromFloat(v)
+	}
+
+	// MTTR = média (segundos) de (resolved_at - created_at) na janela.
+	mttrRow, err := q.MTTRMeanSecondsInWindow(ctx, queries.MTTRMeanSecondsInWindowParams{
+		ProjectID:     project.ID,
+		ResolvedSince: pgTime(since),
+	})
+	if err != nil {
+		return fmt.Errorf("compute mttr: %w", err)
+	}
+	var mttrMeanS *int64
+	if mttrRow.SampleSize > 0 {
+		v := int64(coerceFloat(mttrRow.MeanSeconds))
+		mttrMeanS = &v
+	}
+
 	classification := calculator.WorstOf(
 		calculator.ClassifyDeploymentFrequency(df),
 		calculator.ClassifyLeadTime(leadTimeMedianS),
+		calculator.ClassifyChangeFailureRate(cfrFloat),
+		calculator.ClassifyMTTR(mttrMeanS),
 	)
 
 	dfNumeric, err := numericFromFloat(df)
@@ -330,8 +379,8 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		ComputedAt:          time.Now().UTC(),
 		DeploymentFrequency: dfNumeric,
 		LeadTimeMedianS:     leadTimeMedianS,
-		ChangeFailureRate:   pgtype.Numeric{}, // NULL ainda (próxima fatia da Fase 2)
-		MttrMeanS:           nil,
+		ChangeFailureRate:   cfrNumeric,
+		MttrMeanS:           mttrMeanS,
 		Classification:      strPtr(classification),
 		SampleSize:          int32(count),
 	})
@@ -346,6 +395,10 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		Float64("df_per_day", df).
 		Int64("lt_sample", ltRow.SampleSize).
 		Interface("lt_median_s", leadTimeMedianS).
+		Int64("cfr_sample", cfrRow.SampleSize).
+		Interface("cfr", cfrFloat).
+		Int64("mttr_sample", mttrRow.SampleSize).
+		Interface("mttr_mean_s", mttrMeanS).
 		Str("class", classification).
 		Msg("metric window updated")
 
@@ -391,6 +444,139 @@ func coerceFloat(v interface{}) float64 {
 		return 0
 	}
 	return 0
+}
+
+// HandleCollectJira coleta incidents Jira para o projeto, faz upsert e
+// linka cada incident novo ao deployment de produção mais recente cujo
+// finished_at cai em (incident.created_at - IncidentLinkLookback, incident.created_at].
+func (h *Handlers) HandleCollectJira(ctx context.Context, task *asynq.Task) error {
+	var payload CollectJiraPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal payload: %w (%w)", err, asynq.SkipRetry)
+	}
+
+	q := queries.New(h.DB.Pool)
+
+	project, err := q.GetProject(ctx, payload.ProjectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("load project: %w", err)
+	}
+
+	if len(project.JiraProjectKeys) == 0 {
+		log.Warn().
+			Str("project_id", project.ID.String()).
+			Msg("project has no jira_project_keys; skipping jira collect")
+		return nil
+	}
+
+	jiraInstance, err := q.GetFirstSourceInstanceForTenantKind(ctx,
+		queries.GetFirstSourceInstanceForTenantKindParams{
+			TenantID: project.TenantID,
+			Kind:     "jira",
+		},
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Warn().
+				Str("project_id", project.ID.String()).
+				Msg("no jira source_instance for tenant; skipping")
+			return nil
+		}
+		return fmt.Errorf("load jira source: %w", err)
+	}
+
+	// Auth via secret provider — auth_ref aponta para JIRA_API_TOKEN.
+	apiToken, err := h.Secret.Get(ctx, jiraInstance.AuthRef)
+	if err != nil {
+		return fmt.Errorf("resolve jira token (auth_ref=%s): %w",
+			jiraInstance.AuthRef, err)
+	}
+
+	// JIRA_EMAIL é env separada; secret provider expõe.
+	email, err := h.Secret.Get(ctx, "JIRA_EMAIL")
+	if err != nil {
+		return fmt.Errorf("resolve JIRA_EMAIL: %w", err)
+	}
+
+	source := jira.NewRESTSource(jiraInstance.BaseUrl, email, apiToken)
+
+	// Monta JQL: incident_jql do projeto + restrição aos jira_project_keys.
+	keys := strings.Join(quoteEach(project.JiraProjectKeys), ", ")
+	jql := fmt.Sprintf("(%s) AND project in (%s) ORDER BY created ASC",
+		project.IncidentJql, keys)
+
+	issues, err := source.SearchIssues(ctx, jql, 0)
+	if err != nil {
+		return fmt.Errorf("jira search: %w", err)
+	}
+
+	for _, issue := range issues {
+		row, err := q.UpsertIncident(ctx, queries.UpsertIncidentParams{
+			TenantID:         project.TenantID,
+			SourceInstanceID: jiraInstance.ID,
+			ExternalID:       issue.Key,
+			JiraProjectKey:   issue.ProjectKey,
+			Summary:          issue.Summary,
+			Status:           issue.Status,
+			StatusCategory:   issue.StatusCategory,
+			Priority:         strPtr(issue.Priority),
+			Issuetype:        strPtr(issue.IssueType),
+			Labels:           issue.Labels,
+			CreatedAt:        issue.Created,
+			ResolvedAt:       pgTimePtr(issue.Resolved),
+			RawPayload:       issue.Raw,
+		})
+		if err != nil {
+			return fmt.Errorf("upsert incident %s: %w", issue.Key, err)
+		}
+
+		// Linking: acha o deploy de produção mais recente em
+		// (created - IncidentLinkLookback, created]; se houver, vincula.
+		floor := issue.Created.Add(-IncidentLinkLookback)
+		deployID, err := q.FindDeploymentForIncident(ctx,
+			queries.FindDeploymentForIncidentParams{
+				ProjectID:         project.ID,
+				IncidentCreatedAt: pgTime(issue.Created),
+				LookbackFloor:     pgTime(floor),
+			},
+		)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue // nenhum deploy candidato — não é falha
+		}
+		if err != nil {
+			return fmt.Errorf("find deploy for incident %s: %w", issue.Key, err)
+		}
+		if err := q.UpsertDeploymentIncidentLink(ctx,
+			queries.UpsertDeploymentIncidentLinkParams{
+				DeploymentID: deployID,
+				IncidentID:   row.ID,
+				LinkReason:   "time_window",
+			},
+		); err != nil {
+			return fmt.Errorf("link incident %s ↔ deploy %s: %w",
+				issue.Key, deployID, err)
+		}
+	}
+
+	log.Info().
+		Str("project_id", project.ID.String()).
+		Str("path", project.PathWithNamespace).
+		Int("incidents", len(issues)).
+		Msg("jira collect complete")
+
+	return nil
+}
+
+// quoteEach envolve cada elemento em aspas duplas (formato JQL).
+func quoteEach(keys []string) []string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		out[i] = `"` + k + `"`
+	}
+	return out
 }
 
 // correlateDeploymentsAndMRs atribui cada MR mergeado ao primeiro deployment
