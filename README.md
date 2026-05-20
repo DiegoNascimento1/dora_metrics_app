@@ -45,6 +45,40 @@ Para subir tudo em containers:
 make up-full
 ```
 
+### Sem `make`, Go ou `migrate` instalados? (Windows / onboarding rápido)
+
+Só com Docker dá pra subir e validar o schema sem instalar a stack toda:
+
+```powershell
+# Sobe Postgres + Redis
+docker compose up -d postgres redis
+
+# Aplica migrations via container oficial (sem precisar do binário `migrate`)
+docker run --rm `
+  --network dora-metrics_default `
+  -v "${PWD}/backend/migrations:/migrations" `
+  migrate/migrate:v4.18.1 `
+  -path=/migrations `
+  -database "postgres://dora:dora@dora-metrics-postgres-1:5432/dora?sslmode=disable" `
+  up
+
+# Conferir schema
+docker exec dora-metrics-postgres-1 psql -U dora -d dora -c "\dt platform.*"
+```
+
+> Em Git Bash no Windows, prefixe `MSYS_NO_PATHCONV=1` no `docker run` acima
+> pra evitar que `/migrations` seja convertido para um caminho Windows.
+
+Para instalar a stack completa:
+
+```powershell
+winget install GoLang.Go
+winget install OpenJS.NodeJS.LTS    # Node 24
+winget install GnuWin32.Make
+# migrate via go install após Go pronto:
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+```
+
 ## Layout
 
 ```
