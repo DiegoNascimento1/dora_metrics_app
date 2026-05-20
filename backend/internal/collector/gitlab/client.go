@@ -132,6 +132,107 @@ func (c *Client) ListDeployments(ctx context.Context, projectID string, opts Lis
 	return all, nil
 }
 
+// MergeRequest é a projeção mínima de um MR GitLab.
+type MergeRequest struct {
+	ID             int        `json:"id"`
+	IID            int        `json:"iid"`
+	Title          string     `json:"title"`
+	State          string     `json:"state"`
+	TargetBranch   string     `json:"target_branch"`
+	SourceBranch   string     `json:"source_branch"`
+	MergedAt       *time.Time `json:"merged_at"`
+	MergeCommitSHA *string    `json:"merge_commit_sha"`
+	SquashCommitSHA *string   `json:"squash_commit_sha"`
+	WebURL         string     `json:"web_url"`
+	Labels         []string   `json:"labels"`
+	Author         *User      `json:"author"`
+	Additions      *int       `json:"user_additions"`
+	Deletions      *int       `json:"user_deletions"`
+}
+
+// Commit é a projeção mínima de um commit (usado para `first_commit_at`).
+type Commit struct {
+	ID            string    `json:"id"`
+	ShortID       string    `json:"short_id"`
+	AuthoredDate  time.Time `json:"authored_date"`
+	CommittedDate time.Time `json:"committed_date"`
+	AuthorName    string    `json:"author_name"`
+}
+
+// ListMergeRequestsOpts agrupa filtros do listing de MRs.
+type ListMergeRequestsOpts struct {
+	State        string // "merged", "opened", "closed", "all"
+	TargetBranch string
+	UpdatedAfter time.Time
+	PerPage      int
+}
+
+// ListMergeRequests percorre páginas e devolve os MRs que casam com os filtros,
+// ordenados por updated_at ASC.
+func (c *Client) ListMergeRequests(ctx context.Context, projectID string, opts ListMergeRequestsOpts) ([]MergeRequest, error) {
+	if opts.PerPage <= 0 || opts.PerPage > 100 {
+		opts.PerPage = 100
+	}
+
+	q := url.Values{}
+	q.Set("per_page", strconv.Itoa(opts.PerPage))
+	q.Set("order_by", "updated_at")
+	q.Set("sort", "asc")
+	if opts.State != "" {
+		q.Set("state", opts.State)
+	}
+	if opts.TargetBranch != "" {
+		q.Set("target_branch", opts.TargetBranch)
+	}
+	if !opts.UpdatedAfter.IsZero() {
+		q.Set("updated_after", opts.UpdatedAfter.UTC().Format(time.RFC3339))
+	}
+
+	var all []MergeRequest
+	page := 1
+	for {
+		q.Set("page", strconv.Itoa(page))
+		path := fmt.Sprintf("/api/v4/projects/%s/merge_requests?%s", url.PathEscape(projectID), q.Encode())
+
+		var batch []MergeRequest
+		nextPage, err := c.doGetJSONPaged(ctx, path, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if nextPage == 0 {
+			break
+		}
+		page = nextPage
+	}
+	return all, nil
+}
+
+// ListMRCommits devolve os commits associados a um MR (todos os commits da
+// branch, na ordem em que aparecem no MR). O primeiro commit corresponde ao
+// `first_commit_at` usado no cálculo de Lead Time.
+func (c *Client) ListMRCommits(ctx context.Context, projectID string, mrIID int) ([]Commit, error) {
+	path := fmt.Sprintf("/api/v4/projects/%s/merge_requests/%d/commits?per_page=100",
+		url.PathEscape(projectID), mrIID)
+
+	var all []Commit
+	page := 1
+	for {
+		pagedPath := fmt.Sprintf("%s&page=%d", path, page)
+		var batch []Commit
+		nextPage, err := c.doGetJSONPaged(ctx, pagedPath, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if nextPage == 0 {
+			break
+		}
+		page = nextPage
+	}
+	return all, nil
+}
+
 // Ping checa conectividade.
 func (c *Client) Ping(ctx context.Context) error {
 	return c.doGetJSON(ctx, "/api/v4/version", &struct{}{})
