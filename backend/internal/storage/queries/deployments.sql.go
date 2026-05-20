@@ -127,7 +127,7 @@ ON CONFLICT (project_id, external_id) DO UPDATE
   SET status = EXCLUDED.status,
       finished_at = EXCLUDED.finished_at,
       raw_payload = EXCLUDED.raw_payload
-RETURNING id, project_id, environment_id, external_id, sha, ref, status, triggered_by, started_at, finished_at, is_rollback, raw_payload
+RETURNING id, project_id, environment_id, external_id, sha, ref, status, triggered_by, started_at, finished_at, is_rollback, raw_payload, triggerer_person_id
 `
 
 type UpsertDeploymentParams struct {
@@ -172,6 +172,7 @@ func (q *Queries) UpsertDeployment(ctx context.Context, arg UpsertDeploymentPara
 		&i.FinishedAt,
 		&i.IsRollback,
 		&i.RawPayload,
+		&i.TriggererPersonID,
 	)
 	return i, err
 }

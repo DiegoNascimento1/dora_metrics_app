@@ -12,6 +12,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDeploymentsByPersonInWindow = `-- name: CountDeploymentsByPersonInWindow :one
+SELECT COUNT(*)::bigint AS deploy_count
+FROM platform.deployment d
+JOIN platform.environment e ON e.id = d.environment_id
+WHERE d.triggerer_person_id = $1
+  AND e.is_production
+  AND d.status = 'success'
+  AND d.finished_at >= $2
+`
+
+type CountDeploymentsByPersonInWindowParams struct {
+	PersonID      pgtype.UUID        `json:"person_id"`
+	FinishedSince pgtype.Timestamptz `json:"finished_since"`
+}
+
+func (q *Queries) CountDeploymentsByPersonInWindow(ctx context.Context, arg CountDeploymentsByPersonInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDeploymentsByPersonInWindow, arg.PersonID, arg.FinishedSince)
+	var deploy_count int64
+	err := row.Scan(&deploy_count)
+	return deploy_count, err
+}
+
+const countIncidentsLinkedToPersonInWindow = `-- name: CountIncidentsLinkedToPersonInWindow :one
+SELECT COUNT(DISTINCT i.id)::bigint AS incident_count
+FROM platform.incident i
+JOIN platform.deployment_incident_link dil ON dil.incident_id = i.id
+JOIN platform.deployment d                 ON d.id = dil.deployment_id
+JOIN platform.environment e                ON e.id = d.environment_id
+WHERE d.triggerer_person_id = $1
+  AND e.is_production
+  AND d.finished_at >= $2
+`
+
+type CountIncidentsLinkedToPersonInWindowParams struct {
+	PersonID      pgtype.UUID        `json:"person_id"`
+	FinishedSince pgtype.Timestamptz `json:"finished_since"`
+}
+
+// Quantos incidents foram causados por deploys que ESSA pessoa disparou,
+// na janela. Aproximação per-person de CFR (denominador real é seus deploys).
+func (q *Queries) CountIncidentsLinkedToPersonInWindow(ctx context.Context, arg CountIncidentsLinkedToPersonInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIncidentsLinkedToPersonInWindow, arg.PersonID, arg.FinishedSince)
+	var incident_count int64
+	err := row.Scan(&incident_count)
+	return incident_count, err
+}
+
 const createPerson = `-- name: CreatePerson :one
 INSERT INTO platform.person (tenant_id, display_name, primary_email, avatar_url)
 VALUES ($1, $2, $3, $4)
@@ -177,6 +224,45 @@ func (q *Queries) GetPerson(ctx context.Context, id uuid.UUID) (PlatformPerson, 
 		&i.AvatarUrl,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const leadTimeMedianByPersonInWindow = `-- name: LeadTimeMedianByPersonInWindow :one
+SELECT
+  COALESCE(
+    PERCENTILE_CONT(0.5) WITHIN GROUP (
+      ORDER BY EXTRACT(EPOCH FROM (d.finished_at - mr.first_commit_at))
+    ),
+    0
+  ) AS median_seconds,
+  COUNT(*) AS sample_size
+FROM platform.deployment d
+JOIN platform.environment e        ON e.id = d.environment_id
+JOIN platform.deployment_mr_link l ON l.deployment_id = d.id
+JOIN platform.merge_request mr     ON mr.id = l.merge_request_id
+WHERE mr.author_person_id = $1
+  AND e.is_production
+  AND d.status = 'success'
+  AND d.finished_at >= $2
+  AND mr.first_commit_at IS NOT NULL
+`
+
+type LeadTimeMedianByPersonInWindowParams struct {
+	PersonID      pgtype.UUID        `json:"person_id"`
+	FinishedSince pgtype.Timestamptz `json:"finished_since"`
+}
+
+type LeadTimeMedianByPersonInWindowRow struct {
+	MedianSeconds interface{} `json:"median_seconds"`
+	SampleSize    int64       `json:"sample_size"`
+}
+
+// Lead Time mediano dos MRs autorados pela pessoa cujos deployments de
+// produção bem-sucedidos vinculados caem na janela.
+func (q *Queries) LeadTimeMedianByPersonInWindow(ctx context.Context, arg LeadTimeMedianByPersonInWindowParams) (LeadTimeMedianByPersonInWindowRow, error) {
+	row := q.db.QueryRow(ctx, leadTimeMedianByPersonInWindow, arg.PersonID, arg.FinishedSince)
+	var i LeadTimeMedianByPersonInWindowRow
+	err := row.Scan(&i.MedianSeconds, &i.SampleSize)
 	return i, err
 }
 
@@ -366,6 +452,61 @@ func (q *Queries) ListUnlinkedIdentities(ctx context.Context, tenantID uuid.UUID
 		return nil, err
 	}
 	return items, nil
+}
+
+const propagatePersonToDeployments = `-- name: PropagatePersonToDeployments :execrows
+WITH matches AS (
+  SELECT d.id AS d_id, pi.person_id
+  FROM platform.deployment d
+  JOIN platform.project p ON p.id = d.project_id
+  JOIN platform.person_identity pi
+    ON pi.tenant_id = p.tenant_id
+   AND pi.kind = 'gitlab'
+   AND pi.person_id IS NOT NULL
+   AND lower(pi.external_username) = lower(d.triggered_by)
+)
+UPDATE platform.deployment d
+SET triggerer_person_id = matches.person_id
+FROM matches
+WHERE d.id = matches.d_id
+  AND (d.triggerer_person_id IS NULL OR d.triggerer_person_id <> matches.person_id)
+`
+
+func (q *Queries) PropagatePersonToDeployments(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, propagatePersonToDeployments)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const propagatePersonToMergeRequests = `-- name: PropagatePersonToMergeRequests :execrows
+WITH matches AS (
+  SELECT mr.id AS mr_id, pi.person_id
+  FROM platform.merge_request mr
+  JOIN platform.project p ON p.id = mr.project_id
+  JOIN platform.person_identity pi
+    ON pi.tenant_id = p.tenant_id
+   AND pi.kind = 'gitlab'
+   AND pi.person_id IS NOT NULL
+   AND lower(pi.external_username) = lower(mr.author_username)
+)
+UPDATE platform.merge_request mr
+SET author_person_id = matches.person_id
+FROM matches
+WHERE mr.id = matches.mr_id
+  AND (mr.author_person_id IS NULL OR mr.author_person_id <> matches.person_id)
+`
+
+// Atualiza merge_request.author_person_id para todos os MRs cujo
+// author_username casa (case-insensitive) com alguma identity já linkada
+// à pessoa, no mesmo tenant. Idempotente.
+func (q *Queries) PropagatePersonToMergeRequests(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, propagatePersonToMergeRequests)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unlinkIdentity = `-- name: UnlinkIdentity :exec

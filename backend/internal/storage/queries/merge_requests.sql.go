@@ -13,7 +13,7 @@ import (
 )
 
 const listMergedMRsBetween = `-- name: ListMergedMRsBetween :many
-SELECT id, project_id, external_id, iid, title, author_username, author_is_bot, target_branch, source_branch, merged_at, merge_commit_sha, squash_commit_sha, first_commit_at, first_commit_sha, additions, deletions, labels, web_url, raw_payload FROM platform.merge_request
+SELECT id, project_id, external_id, iid, title, author_username, author_is_bot, target_branch, source_branch, merged_at, merge_commit_sha, squash_commit_sha, first_commit_at, first_commit_sha, additions, deletions, labels, web_url, raw_payload, author_person_id FROM platform.merge_request
 WHERE project_id = $1
   AND target_branch = ANY($2::text[])
   AND merged_at > $3
@@ -64,6 +64,7 @@ func (q *Queries) ListMergedMRsBetween(ctx context.Context, arg ListMergedMRsBet
 			&i.Labels,
 			&i.WebUrl,
 			&i.RawPayload,
+			&i.AuthorPersonID,
 		); err != nil {
 			return nil, err
 		}
@@ -98,7 +99,7 @@ ON CONFLICT (project_id, external_id) DO UPDATE
       labels            = EXCLUDED.labels,
       web_url           = EXCLUDED.web_url,
       raw_payload       = EXCLUDED.raw_payload
-RETURNING id, project_id, external_id, iid, title, author_username, author_is_bot, target_branch, source_branch, merged_at, merge_commit_sha, squash_commit_sha, first_commit_at, first_commit_sha, additions, deletions, labels, web_url, raw_payload
+RETURNING id, project_id, external_id, iid, title, author_username, author_is_bot, target_branch, source_branch, merged_at, merge_commit_sha, squash_commit_sha, first_commit_at, first_commit_sha, additions, deletions, labels, web_url, raw_payload, author_person_id
 `
 
 type UpsertMergeRequestParams struct {
@@ -164,6 +165,7 @@ func (q *Queries) UpsertMergeRequest(ctx context.Context, arg UpsertMergeRequest
 		&i.Labels,
 		&i.WebUrl,
 		&i.RawPayload,
+		&i.AuthorPersonID,
 	)
 	return i, err
 }

@@ -73,6 +73,85 @@ SELECT * FROM platform.person_identity
 WHERE tenant_id = sqlc.arg(tenant_id)
   AND lower(external_username) = lower(sqlc.arg(username)::text);
 
+-- name: PropagatePersonToMergeRequests :execrows
+-- Atualiza merge_request.author_person_id para todos os MRs cujo
+-- author_username casa (case-insensitive) com alguma identity já linkada
+-- à pessoa, no mesmo tenant. Idempotente.
+WITH matches AS (
+  SELECT mr.id AS mr_id, pi.person_id
+  FROM platform.merge_request mr
+  JOIN platform.project p ON p.id = mr.project_id
+  JOIN platform.person_identity pi
+    ON pi.tenant_id = p.tenant_id
+   AND pi.kind = 'gitlab'
+   AND pi.person_id IS NOT NULL
+   AND lower(pi.external_username) = lower(mr.author_username)
+)
+UPDATE platform.merge_request mr
+SET author_person_id = matches.person_id
+FROM matches
+WHERE mr.id = matches.mr_id
+  AND (mr.author_person_id IS NULL OR mr.author_person_id <> matches.person_id);
+
+-- name: PropagatePersonToDeployments :execrows
+WITH matches AS (
+  SELECT d.id AS d_id, pi.person_id
+  FROM platform.deployment d
+  JOIN platform.project p ON p.id = d.project_id
+  JOIN platform.person_identity pi
+    ON pi.tenant_id = p.tenant_id
+   AND pi.kind = 'gitlab'
+   AND pi.person_id IS NOT NULL
+   AND lower(pi.external_username) = lower(d.triggered_by)
+)
+UPDATE platform.deployment d
+SET triggerer_person_id = matches.person_id
+FROM matches
+WHERE d.id = matches.d_id
+  AND (d.triggerer_person_id IS NULL OR d.triggerer_person_id <> matches.person_id);
+
+-- name: CountDeploymentsByPersonInWindow :one
+SELECT COUNT(*)::bigint AS deploy_count
+FROM platform.deployment d
+JOIN platform.environment e ON e.id = d.environment_id
+WHERE d.triggerer_person_id = sqlc.arg(person_id)
+  AND e.is_production
+  AND d.status = 'success'
+  AND d.finished_at >= sqlc.arg(finished_since);
+
+-- name: LeadTimeMedianByPersonInWindow :one
+-- Lead Time mediano dos MRs autorados pela pessoa cujos deployments de
+-- produção bem-sucedidos vinculados caem na janela.
+SELECT
+  COALESCE(
+    PERCENTILE_CONT(0.5) WITHIN GROUP (
+      ORDER BY EXTRACT(EPOCH FROM (d.finished_at - mr.first_commit_at))
+    ),
+    0
+  ) AS median_seconds,
+  COUNT(*) AS sample_size
+FROM platform.deployment d
+JOIN platform.environment e        ON e.id = d.environment_id
+JOIN platform.deployment_mr_link l ON l.deployment_id = d.id
+JOIN platform.merge_request mr     ON mr.id = l.merge_request_id
+WHERE mr.author_person_id = sqlc.arg(person_id)
+  AND e.is_production
+  AND d.status = 'success'
+  AND d.finished_at >= sqlc.arg(finished_since)
+  AND mr.first_commit_at IS NOT NULL;
+
+-- name: CountIncidentsLinkedToPersonInWindow :one
+-- Quantos incidents foram causados por deploys que ESSA pessoa disparou,
+-- na janela. Aproximação per-person de CFR (denominador real é seus deploys).
+SELECT COUNT(DISTINCT i.id)::bigint AS incident_count
+FROM platform.incident i
+JOIN platform.deployment_incident_link dil ON dil.incident_id = i.id
+JOIN platform.deployment d                 ON d.id = dil.deployment_id
+JOIN platform.environment e                ON e.id = d.environment_id
+WHERE d.triggerer_person_id = sqlc.arg(person_id)
+  AND e.is_production
+  AND d.finished_at >= sqlc.arg(finished_since);
+
 -- name: ListGitlabUsernamesFromEvents :many
 -- Backfill: usernames únicos que já apareceram em merge_request.author_username
 -- ou deployment.triggered_by, restrito ao tenant via JOIN com project.

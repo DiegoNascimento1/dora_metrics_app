@@ -16,6 +16,10 @@ type Querier interface {
 	// na janela. Retorna 0 quando não há amostra (caller usa sample_size para
 	// decidir se devolve NULL na API).
 	ChangeFailureRateInWindow(ctx context.Context, arg ChangeFailureRateInWindowParams) (ChangeFailureRateInWindowRow, error)
+	CountDeploymentsByPersonInWindow(ctx context.Context, arg CountDeploymentsByPersonInWindowParams) (int64, error)
+	// Quantos incidents foram causados por deploys que ESSA pessoa disparou,
+	// na janela. Aproximação per-person de CFR (denominador real é seus deploys).
+	CountIncidentsLinkedToPersonInWindow(ctx context.Context, arg CountIncidentsLinkedToPersonInWindowParams) (int64, error)
 	CountSuccessfulProductionDeploymentsInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsInWindowParams) (int64, error)
 	CreatePerson(ctx context.Context, arg CreatePersonParams) (PlatformPerson, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
@@ -50,6 +54,9 @@ type Querier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (PlatformTenant, error)
 	GetTenantBySlug(ctx context.Context, slug string) (PlatformTenant, error)
 	InsertRawEvent(ctx context.Context, arg InsertRawEventParams) (RawRawEvent, error)
+	// Lead Time mediano dos MRs autorados pela pessoa cujos deployments de
+	// produção bem-sucedidos vinculados caem na janela.
+	LeadTimeMedianByPersonInWindow(ctx context.Context, arg LeadTimeMedianByPersonInWindowParams) (LeadTimeMedianByPersonInWindowRow, error)
 	// Mediana de (deploy.finished_at - mr.first_commit_at) para os MRs
 	// atribuídos a deployments de produção bem-sucedidos na janela.
 	// COALESCE para 0 quando sample_size = 0 (PERCENTILE_CONT retorna NULL nesse caso).
@@ -89,6 +96,11 @@ type Querier interface {
 	// resolvidos na janela. NULL quando não houver amostra; caller checa sample.
 	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
 	MarkRawEventProcessed(ctx context.Context, arg MarkRawEventProcessedParams) error
+	PropagatePersonToDeployments(ctx context.Context) (int64, error)
+	// Atualiza merge_request.author_person_id para todos os MRs cujo
+	// author_username casa (case-insensitive) com alguma identity já linkada
+	// à pessoa, no mesmo tenant. Idempotente.
+	PropagatePersonToMergeRequests(ctx context.Context) (int64, error)
 	UnlinkIdentity(ctx context.Context, id uuid.UUID) error
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpsertClassificationThreshold(ctx context.Context, arg UpsertClassificationThresholdParams) (PlatformClassificationThreshold, error)

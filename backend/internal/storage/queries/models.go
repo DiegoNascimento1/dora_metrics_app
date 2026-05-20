@@ -58,18 +58,19 @@ type PlatformClassificationThreshold struct {
 }
 
 type PlatformDeployment struct {
-	ID            uuid.UUID          `json:"id"`
-	ProjectID     uuid.UUID          `json:"project_id"`
-	EnvironmentID uuid.UUID          `json:"environment_id"`
-	ExternalID    string             `json:"external_id"`
-	Sha           string             `json:"sha"`
-	Ref           *string            `json:"ref"`
-	Status        string             `json:"status"`
-	TriggeredBy   *string            `json:"triggered_by"`
-	StartedAt     pgtype.Timestamptz `json:"started_at"`
-	FinishedAt    pgtype.Timestamptz `json:"finished_at"`
-	IsRollback    bool               `json:"is_rollback"`
-	RawPayload    []byte             `json:"raw_payload"`
+	ID                uuid.UUID          `json:"id"`
+	ProjectID         uuid.UUID          `json:"project_id"`
+	EnvironmentID     uuid.UUID          `json:"environment_id"`
+	ExternalID        string             `json:"external_id"`
+	Sha               string             `json:"sha"`
+	Ref               *string            `json:"ref"`
+	Status            string             `json:"status"`
+	TriggeredBy       *string            `json:"triggered_by"`
+	StartedAt         pgtype.Timestamptz `json:"started_at"`
+	FinishedAt        pgtype.Timestamptz `json:"finished_at"`
+	IsRollback        bool               `json:"is_rollback"`
+	RawPayload        []byte             `json:"raw_payload"`
+	TriggererPersonID pgtype.UUID        `json:"triggerer_person_id"`
 }
 
 type PlatformDeploymentIncidentLink struct {
@@ -130,6 +131,7 @@ type PlatformMergeRequest struct {
 	Labels          []string           `json:"labels"`
 	WebUrl          *string            `json:"web_url"`
 	RawPayload      []byte             `json:"raw_payload"`
+	AuthorPersonID  pgtype.UUID        `json:"author_person_id"`
 }
 
 type PlatformPerson struct {
