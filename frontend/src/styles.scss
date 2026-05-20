@@ -10,6 +10,8 @@ html, body {
   background: var(--color-bg);
   color: var(--color-text-primary);
   font-feature-settings: 'cv11', 'ss01'; /* Inter: numerais alt + alt-a */
+  /* Transição suave ao alternar tema (cores apenas; layout não anima). */
+  transition: background-color var(--transition-base), color var(--transition-base);
 }
 
 * {
@@ -61,11 +63,51 @@ mat-card {
   border-radius: var(--radius-lg) !important;
   border: 1px solid var(--color-border) !important;
   background: var(--color-bg-elevated) !important;
+  color: var(--color-text-primary) !important;
+  transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
 mat-card-title {
   font-weight: 600 !important;
   letter-spacing: -0.01em;
+  color: var(--color-text-primary) !important;
+}
+
+mat-card-subtitle {
+  color: var(--color-text-secondary) !important;
+}
+
+/* Tabelas Material no dark precisam de override (a default usa rgba branco). */
+.mat-mdc-table {
+  background: var(--color-bg-elevated) !important;
+}
+.mat-mdc-header-cell,
+.mat-mdc-cell {
+  color: var(--color-text-primary) !important;
+  border-bottom-color: var(--color-border) !important;
+}
+.mat-mdc-header-cell {
+  color: var(--color-text-secondary) !important;
+}
+
+/* Form fields no dark — Material usa material 3 design tokens próprios,
+   mas o label/outline ficam invisíveis com background escuro. */
+[data-theme="dark"] .mat-mdc-form-field {
+  --mdc-outlined-text-field-label-text-color: var(--color-text-secondary);
+  --mdc-outlined-text-field-input-text-color: var(--color-text-primary);
+  --mdc-outlined-text-field-outline-color: var(--color-border-strong);
+  --mdc-outlined-text-field-hover-outline-color: var(--color-brand);
+}
+
+[data-theme="dark"] .mat-mdc-select-value {
+  color: var(--color-text-primary);
+}
+[data-theme="dark"] .mat-mdc-option .mdc-list-item__primary-text {
+  color: var(--color-text-primary);
+}
+[data-theme="dark"] .mat-mdc-select-panel,
+[data-theme="dark"] .mat-mdc-autocomplete-panel {
+  background: var(--color-bg-elevated) !important;
 }
 
 /* Drag-and-drop visual feedback (CDK) */

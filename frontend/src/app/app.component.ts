@@ -1,8 +1,11 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+
+import { ThemeService } from './core/theme/theme.service';
 
 @Component({
   selector: 'app-root',
@@ -15,6 +18,7 @@ import { MatIconModule } from '@angular/material/icon';
     MatToolbarModule,
     MatButtonModule,
     MatIconModule,
+    MatTooltipModule,
   ],
   template: `
     <mat-toolbar class="app-bar">
@@ -26,6 +30,18 @@ import { MatIconModule } from '@angular/material/icon';
       <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
       <a mat-button routerLink="/projects" routerLinkActive="active">Projetos</a>
       <a mat-button routerLink="/people" routerLinkActive="active">Pessoas</a>
+
+      <button
+        mat-icon-button
+        class="theme-toggle"
+        (click)="theme.toggle()"
+        [matTooltip]="theme.isDark() ? 'Mudar para tema claro' : 'Mudar para tema escuro'"
+        [attr.aria-label]="
+          theme.isDark() ? 'Mudar para tema claro' : 'Mudar para tema escuro'
+        "
+      >
+        <mat-icon>{{ theme.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
     </mat-toolbar>
 
     <main class="container">
@@ -70,7 +86,16 @@ import { MatIconModule } from '@angular/material/icon';
         background: var(--color-brand);
         border-radius: 1px;
       }
+      .theme-toggle {
+        margin-left: var(--space-2);
+        color: var(--color-text-secondary);
+      }
+      .theme-toggle:hover {
+        color: var(--color-brand);
+      }
     `,
   ],
 })
-export class AppComponent {}
+export class AppComponent {
+  protected theme = inject(ThemeService);
+}
