@@ -24,6 +24,8 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 **Objetivo:** ingerir dados suficientes para calcular **uma** métrica (Deployment Frequency) de **um** projeto.
 
 - [x] Cadastro de tenant / source_instance / project via CLI (`docker compose run --rm cli ...`)
+- [x] CLI também expõe `collect now --project UUID` e `compute now --project UUID --window N` para disparo manual durante desenvolvimento/incidente
+- [x] `platform.team` no schema com CRUD (sqlc) e FK opcional em `project.team_id` — tabela populada via SQL; sem endpoint de admin ainda (Fase 4)
 - [x] Coletor GitLab via REST (polling 5 min via `asynq.Scheduler`) que descobre deployments do projeto
 - [x] Persistência em `raw_event` (audit) + `deployment` + `environment` (idempotente por external_id)
 - [x] Recálculo da agregação `metric_window` para janela 30d com DF (`compute:metric_window` task)
@@ -102,10 +104,11 @@ Não pertencem a uma fase específica; evoluem em paralelo.
 
 - [x] Unit tests do `calculator` — 100% coverage
 - [x] Unit tests do cliente GitLab — 52% coverage (httptest)
+- [x] CI executa `make test` (backend, com Postgres 18 como service) e `npm test -- --watch=false --browsers=ChromeHeadless` (frontend) em todo push/PR ([.github/workflows/ci.yml](../.github/workflows/ci.yml))
 - [ ] Unit tests do cliente Jira REST
 - [ ] Integration tests dos handlers asynq (com Postgres real via Testcontainers)
 - [ ] Testes E2E do API server (httptest + sqlc mock ou DB)
-- [ ] Karma/Jasmine tests do frontend
+- [ ] Karma/Jasmine specs do frontend (CI roda, mas só há specs default geradas pelo Angular)
 
 ### Observabilidade — Pendente
 
