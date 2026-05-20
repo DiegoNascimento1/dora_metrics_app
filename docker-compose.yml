@@ -11,8 +11,10 @@ services:
       POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
       - "5432:5432"
+    # Postgres 18+ guarda dados em subdiretório versionado (/var/lib/postgresql/18).
+    # Montar o parent permite upgrades futuros com pg_upgrade --link sem mexer no mount.
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dora} -d ${POSTGRES_DB:-dora}"]
       interval: 5s
