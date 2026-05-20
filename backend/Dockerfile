@@ -6,7 +6,7 @@ WORKDIR /src
 
 RUN apk add --no-cache git ca-certificates tzdata
 
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
@@ -18,7 +18,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o /out/api ./cmd/api && \
     CGO_ENABLED=0 GOOS=linux go build \
       -ldflags='-s -w -extldflags "-static"' \
-      -o /out/worker ./cmd/worker
+      -o /out/worker ./cmd/worker && \
+    CGO_ENABLED=0 GOOS=linux go build \
+      -ldflags='-s -w -extldflags "-static"' \
+      -o /out/cli ./cmd/cli
 
 # ---------- API runtime ----------
 FROM gcr.io/distroless/static-debian12:nonroot AS api
@@ -36,3 +39,10 @@ COPY --from=builder /out/worker /app/worker
 COPY --from=builder /src/migrations /app/migrations
 USER nonroot:nonroot
 ENTRYPOINT ["/app/worker"]
+
+# ---------- CLI runtime ----------
+FROM gcr.io/distroless/static-debian12:nonroot AS cli
+WORKDIR /app
+COPY --from=builder /out/cli /app/cli
+USER nonroot:nonroot
+ENTRYPOINT ["/app/cli"]

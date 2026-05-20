@@ -93,5 +93,22 @@ services:
       - "4200:80"
     profiles: ["full"]
 
+  # CLI administrativa. Não roda automaticamente; usar:
+  #   docker compose run --rm cli tenant add --slug acme --name "ACME Corp"
+  cli:
+    build:
+      context: ./backend
+      target: cli
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      WORKER_REDIS_ADDR: redis:6379
+    profiles: ["cli"]
+
 volumes:
   postgres-data:
