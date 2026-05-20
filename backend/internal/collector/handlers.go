@@ -185,6 +185,57 @@ func (h *Handlers) HandleCollectGitlab(ctx context.Context, task *asynq.Task) er
 		}
 	}
 
+	// 3) Sincroniza merge requests (state=merged) na mesma janela.
+	mrs, err := client.ListMergeRequests(ctx, project.ExternalID, gitlab.ListMergeRequestsOpts{
+		State:        "merged",
+		TargetBranch: project.DefaultBranch,
+		UpdatedAfter: since,
+		PerPage:      100,
+	})
+	if err != nil {
+		return fmt.Errorf("list merge requests: %w", err)
+	}
+
+	storedMRs := make(map[string]queries.PlatformMergeRequest, len(mrs))
+	for _, m := range mrs {
+		firstCommitAt, firstCommitSHA := firstCommit(ctx, client, project.ExternalID, m)
+
+		raw, _ := json.Marshal(m)
+
+		row, err := q.UpsertMergeRequest(ctx, queries.UpsertMergeRequestParams{
+			ProjectID:       project.ID,
+			ExternalID:      fmt.Sprintf("%d", m.ID),
+			Iid:             int32(m.IID),
+			Title:           m.Title,
+			AuthorUsername:  authorUsername(m),
+			AuthorIsBot:     isBotAuthor(m),
+			TargetBranch:    m.TargetBranch,
+			SourceBranch:    strPtr(m.SourceBranch),
+			MergedAt:        pgTimePtr(m.MergedAt),
+			MergeCommitSha:  m.MergeCommitSHA,
+			SquashCommitSha: m.SquashCommitSHA,
+			FirstCommitAt:   pgTimePtr(firstCommitAt),
+			FirstCommitSha:  strPtr(firstCommitSHA),
+			Additions:       toInt32Ptr(m.Additions),
+			Deletions:       toInt32Ptr(m.Deletions),
+			Labels:          m.Labels,
+			WebUrl:          strPtr(m.WebURL),
+			RawPayload:      raw,
+		})
+		if err != nil {
+			return fmt.Errorf("upsert merge request %d: %w", m.ID, err)
+		}
+		storedMRs[fmt.Sprintf("%d", m.ID)] = row
+	}
+
+	// 4) Correlaciona MRs ↔ deployments por janela temporal (estratégia
+	//    descrita em docs/06-data-model.md): cada deployment de produção
+	//    "fecha" o intervalo desde o deployment anterior do mesmo projeto;
+	//    todos os MRs merged nesse intervalo são atribuídos a ele.
+	if err := h.correlateDeploymentsAndMRs(ctx, q, project); err != nil {
+		return fmt.Errorf("correlate deployments and MRs: %w", err)
+	}
+
 	if err := q.UpdateProjectLastSynced(ctx, queries.UpdateProjectLastSyncedParams{
 		ID:           project.ID,
 		LastSyncedAt: pgTime(time.Now().UTC()),
@@ -197,6 +248,7 @@ func (h *Handlers) HandleCollectGitlab(ctx context.Context, task *asynq.Task) er
 		Str("path", project.PathWithNamespace).
 		Int("environments", len(envs)).
 		Int("deployments", len(deployments)).
+		Int("merge_requests", len(mrs)).
 		Msg("gitlab collect complete")
 
 	for _, windowDays := range h.Windows {
@@ -243,7 +295,27 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 	}
 
 	df := float64(count) / float64(payload.WindowDays)
-	classification := calculator.ClassifyDeploymentFrequency(df)
+
+	// Lead Time mediano via PERCENTILE_CONT na mesma janela.
+	ltRow, err := q.LeadTimeMedianSecondsInWindow(ctx, queries.LeadTimeMedianSecondsInWindowParams{
+		ProjectID:  project.ID,
+		FinishedAt: pgTime(since),
+	})
+	if err != nil {
+		return fmt.Errorf("compute lead time median: %w", err)
+	}
+	var leadTimeMedianS *int64
+	if ltRow.SampleSize > 0 {
+		v := int64(coerceFloat(ltRow.MedianSeconds))
+		leadTimeMedianS = &v
+	}
+
+	// Classificação combinada: pior tier entre DF e Lead Time
+	// (CFR e MTTR entram aqui quando implementados na Fase 2/B).
+	classification := calculator.WorstOf(
+		calculator.ClassifyDeploymentFrequency(df),
+		calculator.ClassifyLeadTime(leadTimeMedianS),
+	)
 
 	dfNumeric, err := numericFromFloat(df)
 	if err != nil {
@@ -257,8 +329,8 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		WindowDays:          int32(payload.WindowDays),
 		ComputedAt:          time.Now().UTC(),
 		DeploymentFrequency: dfNumeric,
-		LeadTimeMedianS:     nil,
-		ChangeFailureRate:   pgtype.Numeric{}, // NULL na Fase 1
+		LeadTimeMedianS:     leadTimeMedianS,
+		ChangeFailureRate:   pgtype.Numeric{}, // NULL ainda (próxima fatia da Fase 2)
 		MttrMeanS:           nil,
 		Classification:      strPtr(classification),
 		SampleSize:          int32(count),
@@ -270,12 +342,166 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 	log.Info().
 		Str("project_id", project.ID.String()).
 		Int("window_days", payload.WindowDays).
-		Int64("sample", count).
+		Int64("deploys", count).
 		Float64("df_per_day", df).
+		Int64("lt_sample", ltRow.SampleSize).
+		Interface("lt_median_s", leadTimeMedianS).
 		Str("class", classification).
 		Msg("metric window updated")
 
 	return nil
+}
+
+// coerceFloat converte um interface{} vindo do sqlc (que pode ser float64,
+// int64 ou pgtype.Numeric) em float64. NULL/erro = 0 (caller já protegeu
+// com sample_size).
+func coerceFloat(v interface{}) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int64:
+		return float64(x)
+	case pgtype.Numeric:
+		if !x.Valid {
+			return 0
+		}
+		f, err := x.Float64Value()
+		if err != nil || !f.Valid {
+			return 0
+		}
+		return f.Float64
+	case []byte:
+		// Numeric pode chegar como []byte em alguns paths do pgx.
+		var n pgtype.Numeric
+		if err := n.Scan(string(x)); err == nil {
+			f, _ := n.Float64Value()
+			if f.Valid {
+				return f.Float64
+			}
+		}
+		return 0
+	case string:
+		var n pgtype.Numeric
+		if err := n.Scan(x); err == nil {
+			f, _ := n.Float64Value()
+			if f.Valid {
+				return f.Float64
+			}
+		}
+		return 0
+	}
+	return 0
+}
+
+// correlateDeploymentsAndMRs atribui cada MR mergeado ao primeiro deployment
+// de produção bem-sucedido cujo finished_at é >= merged_at do MR.
+//
+// Estratégia time-window (ver docs/06-data-model.md). Para cada par
+// (deployment_i, deployment_{i-1}) ordenado ASC, todos os MRs merged em
+// (deployment_{i-1}.finished_at, deployment_i.finished_at] entram em
+// deployment_i. Para o primeiro deployment, o limite inferior é 30 dias
+// antes do seu finished_at (cobre o backfill).
+//
+// É idempotente: a função sempre varre todos os deploys do projeto e faz
+// upsert no link table; reordenar/recalcular não duplica registros.
+func (h *Handlers) correlateDeploymentsAndMRs(ctx context.Context, q *queries.Queries, project queries.PlatformProject) error {
+	deploys, err := q.ListProductionDeploymentsForProject(ctx, project.ID)
+	if err != nil {
+		return fmt.Errorf("list production deployments: %w", err)
+	}
+
+	branches := []string{project.DefaultBranch}
+
+	for i, d := range deploys {
+		until := d.FinishedAt
+		if !until.Valid {
+			continue
+		}
+
+		var from pgtype.Timestamptz
+		if i == 0 {
+			from = pgTime(until.Time.Add(-30 * 24 * time.Hour))
+		} else if prev := deploys[i-1].FinishedAt; prev.Valid {
+			from = prev
+		} else {
+			from = pgTime(until.Time.Add(-30 * 24 * time.Hour))
+		}
+
+		mrs, err := q.ListMergedMRsBetween(ctx, queries.ListMergedMRsBetweenParams{
+			ProjectID:      project.ID,
+			TargetBranches: branches,
+			MergedAfter:    from,
+			MergedUntil:    until,
+		})
+		if err != nil {
+			return fmt.Errorf("list merged MRs for deploy %s: %w", d.ID, err)
+		}
+
+		for _, m := range mrs {
+			if err := q.UpsertDeploymentMRLink(ctx, queries.UpsertDeploymentMRLinkParams{
+				DeploymentID:   d.ID,
+				MergeRequestID: m.ID,
+			}); err != nil {
+				return fmt.Errorf("link deploy %s ↔ MR %s: %w", d.ID, m.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
+// firstCommit busca os commits do MR e devolve o mais antigo (authored_date)
+// com seu SHA. Retorna (nil, "") em caso de erro — a atribuição em si não falha
+// porque Lead Time daquele MR fica indisponível até o próximo ciclo.
+func firstCommit(ctx context.Context, client *gitlab.Client, projectID string, m gitlab.MergeRequest) (*time.Time, string) {
+	commits, err := client.ListMRCommits(ctx, projectID, m.IID)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Int("mr_iid", m.IID).
+			Msg("list MR commits failed; lead_time will be unavailable for this MR")
+		return nil, ""
+	}
+	if len(commits) == 0 {
+		return nil, ""
+	}
+	earliest := commits[0]
+	for _, c := range commits[1:] {
+		if c.AuthoredDate.Before(earliest.AuthoredDate) {
+			earliest = c
+		}
+	}
+	return &earliest.AuthoredDate, earliest.ID
+}
+
+func authorUsername(m gitlab.MergeRequest) *string {
+	if m.Author == nil {
+		return nil
+	}
+	return strPtr(m.Author.Username)
+}
+
+// isBotAuthor classifica autores conhecidos como bots para que MRs deles não
+// afetem o cálculo de Lead Time (sinal técnico recomendado pelo DORA).
+// Lista extensível por projeto no futuro (coluna em platform.project).
+func isBotAuthor(m gitlab.MergeRequest) bool {
+	if m.Author == nil {
+		return false
+	}
+	switch m.Author.Username {
+	case "dependabot", "dependabot[bot]",
+		"renovate", "renovate[bot]", "renovate-bot",
+		"gitlab-bot", "ghost-user":
+		return true
+	}
+	return false
+}
+
+func toInt32Ptr(p *int) *int32 {
+	if p == nil {
+		return nil
+	}
+	v := int32(*p)
+	return &v
 }
 
 // ---- helpers ----
