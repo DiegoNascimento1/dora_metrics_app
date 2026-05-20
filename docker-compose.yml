@@ -32,6 +32,22 @@ services:
       timeout: 3s
       retries: 5
 
+  # Aplica as migrations e sai. api/worker esperam por isto via
+  # condition: service_completed_successfully.
+  migrate:
+    image: migrate/migrate:v4.18.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${POSTGRES_USER:-dora}:${POSTGRES_PASSWORD:-dora}@postgres:5432/${POSTGRES_DB:-dora}?sslmode=disable
+      - up
+    restart: "no"
+    profiles: ["full", "migrate"]
+
   api:
     build:
       context: ./backend
@@ -41,6 +57,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
@@ -58,6 +76,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
