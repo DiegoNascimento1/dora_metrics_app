@@ -22,14 +22,27 @@ type Querier interface {
 	GetSourceInstance(ctx context.Context, id uuid.UUID) (PlatformSourceInstance, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (PlatformTenant, error)
 	GetTenantBySlug(ctx context.Context, slug string) (PlatformTenant, error)
+	// Mediana de (deploy.finished_at - mr.first_commit_at) para os MRs
+	// atribuídos a deployments de produção bem-sucedidos na janela.
+	// COALESCE para 0 quando sample_size = 0 (PERCENTILE_CONT retorna NULL nesse caso).
+	// O caller DEVE checar sample_size > 0 antes de usar median_seconds.
+	LeadTimeMedianSecondsInWindow(ctx context.Context, arg LeadTimeMedianSecondsInWindowParams) (LeadTimeMedianSecondsInWindowRow, error)
 	ListActiveProjects(ctx context.Context) ([]PlatformProject, error)
 	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]PlatformEnvironment, error)
+	// MRs do projeto cujo merged_at cai no intervalo (gt, lte]. Usado para
+	// atribuir MRs ao deployment que "fechou" aquele intervalo de tempo.
+	ListMergedMRsBetween(ctx context.Context, arg ListMergedMRsBetweenParams) ([]PlatformMergeRequest, error)
+	// Deployments de produção do projeto ordenados por finished_at ASC.
+	// Usado pela correlação MR ↔ deployment.
+	ListProductionDeploymentsForProject(ctx context.Context, projectID uuid.UUID) ([]ListProductionDeploymentsForProjectRow, error)
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpsertDeployment(ctx context.Context, arg UpsertDeploymentParams) (PlatformDeployment, error)
+	UpsertDeploymentMRLink(ctx context.Context, arg UpsertDeploymentMRLinkParams) error
 	UpsertEnvironment(ctx context.Context, arg UpsertEnvironmentParams) (PlatformEnvironment, error)
+	UpsertMergeRequest(ctx context.Context, arg UpsertMergeRequestParams) (PlatformMergeRequest, error)
 	// Insere uma nova versão da janela (não substitui histórico).
 	UpsertMetricWindow(ctx context.Context, arg UpsertMetricWindowParams) (MetricsMetricWindow, error)
 }
