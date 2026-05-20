@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -38,7 +39,10 @@ func main() {
 	}
 	defer db.Close()
 
-	srv := api.NewServer(cfg, db)
+	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Worker.RedisAddr})
+	defer asynqClient.Close()
+
+	srv := api.NewServer(cfg, db, asynqClient)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.HTTPAddr,
 		Handler:           srv,

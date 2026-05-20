@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/hibiken/asynq"
 
 	"github.com/dora-metrics-app/backend/internal/config"
 	"github.com/dora-metrics-app/backend/internal/storage"
@@ -15,14 +16,15 @@ import (
 
 // Server agrega dependências de runtime da API.
 type Server struct {
-	cfg config.Config
-	db  *storage.Pool
-	mux *chi.Mux
+	cfg   config.Config
+	db    *storage.Pool
+	asynq *asynq.Client
+	mux   *chi.Mux
 }
 
 // NewServer constrói o servidor com rotas registradas.
-func NewServer(cfg config.Config, db *storage.Pool) *Server {
-	s := &Server{cfg: cfg, db: db, mux: chi.NewRouter()}
+func NewServer(cfg config.Config, db *storage.Pool, asynqClient *asynq.Client) *Server {
+	s := &Server{cfg: cfg, db: db, asynq: asynqClient, mux: chi.NewRouter()}
 	s.routes()
 	return s
 }
