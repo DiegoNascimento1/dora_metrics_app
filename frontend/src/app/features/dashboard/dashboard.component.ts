@@ -1,9 +1,20 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { FormsModule } from '@angular/forms';
+import { switchMap, of, catchError, finalize } from 'rxjs';
 
-import { Classification, DoraMetrics } from '../../core/api/api.types';
+import { ApiClient } from '../../core/api/api.client';
+import { Classification, DoraMetrics, Project } from '../../core/api/api.types';
 
 interface MetricTile {
   label: string;
@@ -11,46 +22,110 @@ interface MetricTile {
   classification: Classification;
 }
 
+type Window = '7d' | '30d' | '90d';
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatCardModule, MatChipsModule, MatProgressSpinnerModule],
+  imports: [
+    FormsModule,
+    MatCardModule,
+    MatChipsModule,
+    MatProgressSpinnerModule,
+    MatSelectModule,
+    MatFormFieldModule,
+  ],
   template: `
     <h1>DORA — visão geral</h1>
 
-    @if (loading()) {
-      <mat-progress-spinner mode="indeterminate" diameter="40" />
+    @if (projects().length === 0 && !loading()) {
+      <mat-card appearance="outlined">
+        <mat-card-content>
+          Nenhum projeto cadastrado ainda. Use a CLI para adicionar:
+          <pre>
+docker compose run --rm cli project add \\
+  --tenant acme --source gitlab-prod \\
+  --external-id 123 --path acme/api
+          </pre>
+        </mat-card-content>
+      </mat-card>
     } @else {
-      <div class="grid">
-        @for (tile of tiles(); track tile.label) {
-          <mat-card appearance="outlined">
-            <mat-card-header>
-              <mat-card-title>{{ tile.label }}</mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <div class="value">{{ tile.value }}</div>
-              <mat-chip [class]="'tier-' + tile.classification">
-                {{ tile.classification }}
-              </mat-chip>
-            </mat-card-content>
-          </mat-card>
-        }
+      <div class="filters">
+        <mat-form-field appearance="outline">
+          <mat-label>Projeto</mat-label>
+          <mat-select [(value)]="selectedProjectId" (selectionChange)="reload()">
+            @for (p of projects(); track p.id) {
+              <mat-option [value]="p.id">{{ p.pathWithNamespace }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Janela</mat-label>
+          <mat-select [(value)]="selectedWindow" (selectionChange)="reload()">
+            <mat-option value="7d">7 dias</mat-option>
+            <mat-option value="30d">30 dias</mat-option>
+            <mat-option value="90d">90 dias</mat-option>
+          </mat-select>
+        </mat-form-field>
       </div>
+
+      @if (loading()) {
+        <mat-progress-spinner mode="indeterminate" diameter="40" />
+      } @else if (error()) {
+        <mat-card appearance="outlined" class="error">
+          <mat-card-content>{{ error() }}</mat-card-content>
+        </mat-card>
+      } @else {
+        <div class="grid">
+          @for (tile of tiles(); track tile.label) {
+            <mat-card appearance="outlined">
+              <mat-card-header>
+                <mat-card-title>{{ tile.label }}</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="value">{{ tile.value }}</div>
+                <mat-chip [class]="'tier-' + tile.classification">
+                  {{ tile.classification }}
+                </mat-chip>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+
+        <p class="meta">
+          Amostra: {{ metrics()?.sampleSize ?? 0 }} deploys ·
+          Calculado: {{ metrics()?.computedAt ?? '—' }}
+        </p>
+      }
     }
   `,
   styles: [
     `
+      .filters {
+        display: flex;
+        gap: 16px;
+        margin: 16px 0;
+      }
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: 16px;
-        margin-top: 24px;
+        margin-top: 16px;
       }
       .value {
         font-size: 2rem;
         font-weight: 500;
         margin: 12px 0;
+      }
+      .meta {
+        margin-top: 16px;
+        color: #666;
+        font-size: 0.875rem;
+      }
+      .error {
+        background: #fff3e0;
       }
       .tier-elite { background: #2e7d32; color: white; }
       .tier-high { background: #1976d2; color: white; }
@@ -61,52 +136,105 @@ interface MetricTile {
   ],
 })
 export class DashboardComponent {
+  private api = inject(ApiClient);
+
   loading = signal(false);
+  error = signal<string | null>(null);
+  projects = signal<Project[]>([]);
+  metrics = signal<DoraMetrics | null>(null);
 
-  // TODO Fase 1: consumir ApiClient.getProjectMetrics() de um projeto selecionado.
-  private placeholderMetrics: DoraMetrics = {
-    projectId: '00000000-0000-0000-0000-000000000000',
-    windowDays: 30,
-    computedAt: new Date().toISOString(),
-    deploymentFrequency: 0,
-    leadTimeMedianSeconds: null,
-    changeFailureRate: null,
-    mttrMeanSeconds: null,
-    classification: 'insufficient_data',
-    sampleSize: 0,
-  };
+  selectedProjectId: string | null = null;
+  selectedWindow: Window = '30d';
 
-  tiles = signal<MetricTile[]>([
-    {
-      label: 'Deployment Frequency',
-      value: `${this.placeholderMetrics.deploymentFrequency.toFixed(2)}/dia`,
-      classification: this.placeholderMetrics.classification,
-    },
-    {
-      label: 'Lead Time (mediana)',
-      value: this.formatDuration(this.placeholderMetrics.leadTimeMedianSeconds),
-      classification: this.placeholderMetrics.classification,
-    },
-    {
-      label: 'Change Failure Rate',
-      value:
-        this.placeholderMetrics.changeFailureRate === null
-          ? '—'
-          : `${(this.placeholderMetrics.changeFailureRate * 100).toFixed(1)}%`,
-      classification: this.placeholderMetrics.classification,
-    },
-    {
-      label: 'MTTR (média)',
-      value: this.formatDuration(this.placeholderMetrics.mttrMeanSeconds),
-      classification: this.placeholderMetrics.classification,
-    },
-  ]);
+  tiles = computed<MetricTile[]>(() => {
+    const m = this.metrics();
+    if (!m) {
+      return [];
+    }
+    return [
+      {
+        label: 'Deployment Frequency',
+        value: `${m.deploymentFrequency.toFixed(2)}/dia`,
+        classification: m.classification,
+      },
+      {
+        label: 'Lead Time (mediana)',
+        value: this.formatDuration(m.leadTimeMedianSeconds),
+        classification: m.classification,
+      },
+      {
+        label: 'Change Failure Rate',
+        value:
+          m.changeFailureRate === null
+            ? '—'
+            : `${(m.changeFailureRate * 100).toFixed(1)}%`,
+        classification: m.classification,
+      },
+      {
+        label: 'MTTR (média)',
+        value: this.formatDuration(m.mttrMeanSeconds),
+        classification: m.classification,
+      },
+    ];
+  });
 
-  private formatDuration(seconds: number | null): string {
-    if (seconds === null) return '—';
+  constructor() {
+    this.loadProjects();
+  }
+
+  private loadProjects(): void {
+    this.loading.set(true);
+    this.api
+      .listProjects()
+      .pipe(
+        catchError((err) => {
+          this.error.set(this.errorMessage(err));
+          return of([] as Project[]);
+        }),
+        switchMap((projects) => {
+          this.projects.set(projects);
+          if (projects.length === 0) {
+            return of(null);
+          }
+          this.selectedProjectId = projects[0].id;
+          return this.api.getProjectMetrics(this.selectedProjectId, this.selectedWindow).pipe(
+            catchError((err) => {
+              this.error.set(this.errorMessage(err));
+              return of(null);
+            }),
+          );
+        }),
+        finalize(() => this.loading.set(false)),
+      )
+      .subscribe((m) => this.metrics.set(m));
+  }
+
+  reload(): void {
+    if (!this.selectedProjectId) return;
+    this.loading.set(true);
+    this.error.set(null);
+    this.api
+      .getProjectMetrics(this.selectedProjectId, this.selectedWindow)
+      .pipe(
+        catchError((err) => {
+          this.error.set(this.errorMessage(err));
+          return of(null);
+        }),
+        finalize(() => this.loading.set(false)),
+      )
+      .subscribe((m) => this.metrics.set(m));
+  }
+
+  private formatDuration(seconds: number | null | undefined): string {
+    if (seconds === null || seconds === undefined) return '—';
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${(seconds / 60).toFixed(0)}min`;
     if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}h`;
     return `${(seconds / 86400).toFixed(1)}d`;
+  }
+
+  private errorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    return 'Erro ao carregar métricas';
   }
 }
