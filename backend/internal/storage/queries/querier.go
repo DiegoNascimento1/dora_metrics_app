@@ -19,6 +19,9 @@ type Querier interface {
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
 	CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (PlatformTenant, error)
+	// Série temporal de deployments de produção bem-sucedidos por dia (UTC).
+	// Drive da curva de Deployment Frequency.
+	DeploymentsPerDayInWindow(ctx context.Context, arg DeploymentsPerDayInWindowParams) ([]DeploymentsPerDayInWindowRow, error)
 	// Acha o deployment de produção bem-sucedido mais recente do projeto cujo
 	// finished_at está em (incident.created_at - lookback, incident.created_at].
 	// Usado pelo time-window linking de CFR (default lookback = 24h).
@@ -55,6 +58,9 @@ type Querier interface {
 	// Deployments de produção do projeto ordenados por finished_at ASC.
 	// Usado pela correlação MR ↔ deployment.
 	ListProductionDeploymentsForProject(ctx context.Context, projectID uuid.UUID) ([]ListProductionDeploymentsForProjectRow, error)
+	// Lista bruta dos deploys de produção na janela. Drive do drill-down
+	// "clique no tile/ponto → ver os deploys que compõem".
+	ListProductionDeploymentsInWindow(ctx context.Context, arg ListProductionDeploymentsInWindowParams) ([]ListProductionDeploymentsInWindowRow, error)
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)

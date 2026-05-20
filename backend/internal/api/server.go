@@ -55,6 +55,8 @@ func (s *Server) routes() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/projects", s.handleListProjects())
 		r.Get("/projects/{projectId}/metrics", s.handleProjectMetrics())
+		r.Get("/projects/{projectId}/timeseries", s.handleProjectTimeseries())
+		r.Get("/projects/{projectId}/deployments", s.handleProjectDeployments())
 	})
 
 	r.Route("/webhooks", func(r chi.Router) {

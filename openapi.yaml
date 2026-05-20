@@ -87,6 +87,58 @@ paths:
         "404":
           description: projeto não encontrado
 
+  /api/v1/projects/{projectId}/timeseries:
+    get:
+      tags: [metrics]
+      summary: Série temporal diária do projeto (deploys/dia)
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeseriesResponse"
+
+  /api/v1/projects/{projectId}/deployments:
+    get:
+      tags: [metrics]
+      summary: Lista de deploys de produção na janela (drill-down)
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deployment"
+
   /webhooks/gitlab:
     post:
       tags: [webhooks]
@@ -195,3 +247,57 @@ components:
           enum: [elite, high, medium, low, insufficient_data]
         sampleSize:
           type: integer
+
+    TimeseriesPoint:
+      type: object
+      required: [day, deployCount]
+      properties:
+        day:
+          type: string
+          description: ISO date YYYY-MM-DD
+        deployCount:
+          type: integer
+
+    TimeseriesResponse:
+      type: object
+      required: [projectId, windowDays, metric, points]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        windowDays:
+          type: integer
+        metric:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeseriesPoint"
+
+    Deployment:
+      type: object
+      required: [id, sha, status, environmentName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sha:
+          type: string
+        ref:
+          type: string
+          nullable: true
+        status:
+          type: string
+        triggeredBy:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        environmentName:
+          type: string
