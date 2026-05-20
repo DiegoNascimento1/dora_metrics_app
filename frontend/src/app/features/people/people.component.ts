@@ -6,6 +6,12 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import {
+  CdkDrag,
+  CdkDragDrop,
+  CdkDropList,
+  CdkDropListGroup,
+} from '@angular/cdk/drag-drop';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,12 +31,22 @@ import {
   PersonWithIdentities,
 } from '../../core/api/api.types';
 
+interface MetricTile {
+  label: string;
+  value: string;
+}
+
+type Window = '7d' | '30d' | '90d';
+
 @Component({
   selector: 'app-people',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
+    CdkDrag,
+    CdkDropList,
+    CdkDropListGroup,
     MatCardModule,
     MatTableModule,
     MatButtonModule,
@@ -57,7 +73,7 @@ import {
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else {
-      <!-- Sugestões de automatch -->
+      <!-- Sugestões automáticas -->
       @if (suggestions().length > 0) {
         <mat-card appearance="outlined" class="block">
           <mat-card-header>
@@ -65,8 +81,7 @@ import {
               Sugestões de merge ({{ suggestions().length }})
             </mat-card-title>
             <mat-card-subtitle>
-              Identidades não-linkadas que provavelmente são a mesma pessoa.
-              Aplique para criar uma nova pessoa vinculando as duas.
+              O coach (você) decide. Cor da pontuação é puramente visual.
             </mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
@@ -74,28 +89,34 @@ import {
               <ng-container matColumnDef="gitlab">
                 <th mat-header-cell *matHeaderCellDef>GitLab</th>
                 <td mat-cell *matCellDef="let s">
-                  <mat-chip class="kind-gitlab">{{ pickGitLab(s).externalUsername }}</mat-chip>
+                  <span class="src-chip src-gitlab">
+                    {{ pickGitLab(s).externalUsername }}
+                  </span>
                   <span class="muted">{{ pickGitLab(s).externalEmail ?? '' }}</span>
                 </td>
               </ng-container>
               <ng-container matColumnDef="jira">
                 <th mat-header-cell *matHeaderCellDef>Jira</th>
                 <td mat-cell *matCellDef="let s">
-                  <mat-chip class="kind-jira">{{ pickJira(s).externalUsername }}</mat-chip>
+                  <span class="src-chip src-jira">
+                    {{ pickJira(s).externalUsername }}
+                  </span>
                   <span class="muted">{{ pickJira(s).externalEmail ?? '' }}</span>
                 </td>
               </ng-container>
               <ng-container matColumnDef="reason">
-                <th mat-header-cell *matHeaderCellDef>Razão</th>
+                <th mat-header-cell *matHeaderCellDef>Confiança</th>
                 <td mat-cell *matCellDef="let s">
-                  {{ s.reason }} ({{ (s.score * 100).toFixed(0) }}%)
+                  <span class="confidence" [class.confidence-high]="s.score >= 1">
+                    {{ (s.score * 100).toFixed(0) }}% · {{ s.reason }}
+                  </span>
                 </td>
               </ng-container>
               <ng-container matColumnDef="action">
                 <th mat-header-cell *matHeaderCellDef></th>
                 <td mat-cell *matCellDef="let s">
-                  <button mat-stroked-button color="primary" (click)="applySuggestion(s)">
-                    Criar pessoa + vincular
+                  <button mat-flat-button color="primary" (click)="applySuggestion(s)">
+                    Aceitar merge
                   </button>
                 </td>
               </ng-container>
@@ -106,99 +127,117 @@ import {
         </mat-card>
       }
 
-      <!-- Pessoas + identidades vinculadas -->
-      <mat-card appearance="outlined" class="block">
-        <mat-card-header>
-          <mat-card-title>
-            Pessoas ({{ people().length }})
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
+      <p class="hint">
+        <mat-icon class="hint-icon">drag_indicator</mat-icon>
+        Arraste uma identidade da lista para o card de uma pessoa para vincular.
+      </p>
+
+      <div cdkDropListGroup class="dnd-container">
+        <!-- Pessoas (drop targets) -->
+        <div class="people-col">
+          <h2>Pessoas ({{ people().length }})</h2>
+
           @if (people().length === 0) {
-            <p class="muted">
-              Nenhuma pessoa cadastrada. Aplique sugestões acima ou crie via CLI.
-            </p>
-          } @else {
-            @for (p of people(); track p.id) {
-              <div class="person-row">
-                <div class="person-head">
-                  <div>
-                    <strong>{{ p.displayName }}</strong>
-                    @if (p.primaryEmail) {
-                      <span class="muted">· {{ p.primaryEmail }}</span>
-                    }
-                  </div>
-                  <div class="identities">
-                    @for (id of p.identities; track id.id) {
-                      <mat-chip [class]="'kind-' + id.kind">
-                        {{ id.kind }}: {{ id.externalUsername }}
-                      </mat-chip>
-                    }
-                    @if (p.identities.length === 0) {
-                      <span class="muted">(nenhuma identidade vinculada)</span>
-                    }
-                  </div>
+            <mat-card appearance="outlined">
+              <mat-card-content>
+                <p class="muted">
+                  Nenhuma pessoa cadastrada. Aceite uma sugestão ou crie
+                  arrastando uma identidade da coluna ao lado para esta área.
+                </p>
+              </mat-card-content>
+            </mat-card>
+          }
+
+          @for (p of people(); track p.id) {
+            <mat-card
+              appearance="outlined"
+              class="person-card"
+              cdkDropList
+              [cdkDropListData]="p"
+              (cdkDropListDropped)="onDropOnPerson($event, p)"
+            >
+              <mat-card-header>
+                <mat-card-title>{{ p.displayName }}</mat-card-title>
+                @if (p.primaryEmail) {
+                  <mat-card-subtitle>{{ p.primaryEmail }}</mat-card-subtitle>
+                }
+              </mat-card-header>
+              <mat-card-content>
+                <div class="identities">
+                  @for (id of p.identities; track id.id) {
+                    <span [class]="'src-chip src-' + id.kind">
+                      {{ id.kind }}: {{ id.externalUsername }}
+                    </span>
+                  }
+                  @if (p.identities.length === 0) {
+                    <span class="muted">Solte uma identidade aqui</span>
+                  }
                 </div>
                 @if (metricsByPerson()[p.id]; as m) {
                   <div class="person-metrics">
-                    <span class="metric"><b>{{ m.deploymentsTriggered }}</b> deploys</span>
                     <span class="metric">
-                      <b>{{ formatLT(m.leadTimeMedianSeconds) }}</b> LT mediano
-                      <span class="muted">({{ m.leadTimeSampleSize }})</span>
+                      <b>{{ m.deploymentsTriggered }}</b>
+                      <span class="muted">deploys</span>
                     </span>
-                    <span class="metric"><b>{{ m.incidentsLinked }}</b> incidents</span>
-                    <span class="muted">· últimos 30 dias</span>
+                    <span class="metric">
+                      <b>{{ formatLT(m.leadTimeMedianSeconds) }}</b>
+                      <span class="muted">LT mediano ({{ m.leadTimeSampleSize }})</span>
+                    </span>
+                    <span class="metric">
+                      <b>{{ m.incidentsLinked }}</b>
+                      <span class="muted">incidents</span>
+                    </span>
+                    <span class="muted">· 30d</span>
                   </div>
                 }
-              </div>
-            }
+              </mat-card-content>
+            </mat-card>
           }
-        </mat-card-content>
-      </mat-card>
+        </div>
 
-      <!-- Identidades unlinked -->
-      <mat-card appearance="outlined" class="block">
-        <mat-card-header>
-          <mat-card-title>
-            Identidades não-vinculadas ({{ unlinked().length }})
-          </mat-card-title>
-          <mat-card-subtitle>
-            Vistas em commits/deploys/incidents mas ainda sem pessoa canônica.
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
+        <!-- Identidades não-vinculadas (drag source) -->
+        <div class="unlinked-col">
+          <h2>Não vinculadas ({{ unlinked().length }})</h2>
+
           @if (unlinked().length === 0) {
-            <p class="muted">Todas as identidades estão vinculadas.</p>
+            <mat-card appearance="outlined">
+              <mat-card-content>
+                <p class="muted">Tudo vinculado.</p>
+              </mat-card-content>
+            </mat-card>
           } @else {
-            <table mat-table [dataSource]="unlinked()">
-              <ng-container matColumnDef="kind">
-                <th mat-header-cell *matHeaderCellDef>Origem</th>
-                <td mat-cell *matCellDef="let i">
-                  <mat-chip [class]="'kind-' + i.kind">{{ i.kind }}</mat-chip>
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="username">
-                <th mat-header-cell *matHeaderCellDef>Usuário</th>
-                <td mat-cell *matCellDef="let i">{{ i.externalUsername }}</td>
-              </ng-container>
-              <ng-container matColumnDef="email">
-                <th mat-header-cell *matHeaderCellDef>Email</th>
-                <td mat-cell *matCellDef="let i">{{ i.externalEmail ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="action">
-                <th mat-header-cell *matHeaderCellDef></th>
-                <td mat-cell *matCellDef="let i">
-                  <button mat-button (click)="createFromIdentity(i)">
-                    Criar nova pessoa
+            <div
+              cdkDropList
+              [cdkDropListData]="unlinked()"
+              [cdkDropListSortingDisabled]="true"
+              class="unlinked-list"
+            >
+              @for (i of unlinked(); track i.id) {
+                <div class="identity-card" cdkDrag [cdkDragData]="i">
+                  <div class="drag-handle">
+                    <mat-icon>drag_indicator</mat-icon>
+                  </div>
+                  <div>
+                    <span [class]="'src-chip src-' + i.kind">{{ i.kind }}</span>
+                    <strong class="username">{{ i.externalUsername }}</strong>
+                    @if (i.externalEmail) {
+                      <div class="muted">{{ i.externalEmail }}</div>
+                    }
+                  </div>
+                  <button
+                    mat-icon-button
+                    (click)="createFromIdentity(i)"
+                    matTooltip="Criar nova pessoa a partir desta identidade"
+                    aria-label="Criar nova pessoa"
+                  >
+                    <mat-icon>person_add</mat-icon>
                   </button>
-                </td>
-              </ng-container>
-              <tr mat-header-row *matHeaderRowDef="unlinkedCols"></tr>
-              <tr mat-row *matRowDef="let row; columns: unlinkedCols"></tr>
-            </table>
+                </div>
+              }
+            </div>
           }
-        </mat-card-content>
-      </mat-card>
+        </div>
+      </div>
     }
   `,
   styles: [
@@ -206,58 +245,138 @@ import {
       .filters {
         display: flex;
         align-items: center;
-        gap: 16px;
-        margin: 16px 0;
+        gap: var(--space-4);
+        margin: var(--space-4) 0;
       }
       .block {
-        margin-top: 24px;
+        margin-top: var(--space-5);
       }
-      table {
-        width: 100%;
+      .hint {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--color-text-secondary);
+        margin: var(--space-5) 0 var(--space-3);
+        font-size: var(--font-size-sm);
       }
-      .person-row {
+      .hint-icon {
+        font-size: 20px;
+        height: 20px;
+        width: 20px;
+        color: var(--color-text-muted);
+      }
+
+      .dnd-container {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: var(--space-5);
+      }
+      @media (max-width: 960px) {
+        .dnd-container {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      h2 {
+        margin: 0 0 var(--space-3);
+      }
+
+      .person-card {
+        margin-bottom: var(--space-4);
+        transition: background var(--transition-fast), border-color var(--transition-fast);
+      }
+      .person-card.cdk-drop-list-receiving,
+      .person-card.cdk-drop-list-dragging {
+        border-color: var(--color-brand) !important;
+        background: var(--color-tier-high-bg) !important;
+      }
+
+      .unlinked-list {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding: 10px 0;
-        border-bottom: 1px solid #eee;
+        gap: var(--space-2);
       }
-      .person-row:last-child {
-        border-bottom: none;
-      }
-      .person-head {
+      .identity-card {
         display: flex;
-        justify-content: space-between;
-        gap: 12px;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        background: var(--color-bg-elevated);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        cursor: grab;
+        transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+      }
+      .identity-card:hover {
+        border-color: var(--color-brand);
+        box-shadow: var(--shadow-md);
+      }
+      .identity-card:active {
+        cursor: grabbing;
+      }
+      .drag-handle {
+        color: var(--color-text-muted);
+        display: flex;
         align-items: center;
       }
-      .person-metrics {
-        display: flex;
-        gap: 16px;
-        align-items: center;
-        font-size: 0.875rem;
-        color: #555;
+      .username {
+        display: block;
+        margin-top: var(--space-1);
+        font-family: var(--font-mono);
+        font-size: var(--font-size-sm);
       }
-      .person-metrics .metric b {
-        color: #1976d2;
-      }
+
       .identities {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: var(--space-2);
+        min-height: 32px;
+        padding: var(--space-2);
+        border-radius: var(--radius-sm);
+        background: var(--color-surface);
       }
-      .muted {
-        color: #888;
-        font-size: 0.875rem;
-        margin-left: 8px;
+
+      .person-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-4);
+        margin-top: var(--space-3);
+        padding-top: var(--space-3);
+        border-top: 1px dashed var(--color-border);
+        font-size: var(--font-size-sm);
       }
-      mat-chip.kind-gitlab {
-        background: #fc6d26;
+      .person-metrics b {
+        color: var(--color-brand);
+        font-size: var(--font-size-base);
+        font-weight: 600;
+      }
+      .metric {
+        display: inline-flex;
+        align-items: baseline;
+        gap: var(--space-1);
+      }
+
+      .src-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+        font-size: var(--font-size-xs);
+        font-weight: 600;
         color: white;
+        text-transform: lowercase;
       }
-      mat-chip.kind-jira {
-        background: #0052cc;
-        color: white;
+      .src-gitlab { background: var(--color-gitlab); }
+      .src-jira   { background: var(--color-jira); }
+
+      .confidence {
+        font-family: var(--font-mono);
+        font-size: var(--font-size-sm);
+        color: var(--color-text-secondary);
+      }
+      .confidence-high {
+        color: var(--color-tier-elite);
+        font-weight: 600;
       }
     `,
   ],
@@ -274,7 +393,6 @@ export class PeopleComponent {
   metricsByPerson = signal<Record<string, PersonMetrics>>({});
 
   suggestionCols = ['gitlab', 'jira', 'reason', 'action'];
-  unlinkedCols = ['kind', 'username', 'email', 'action'];
 
   constructor() {
     this.reload();
@@ -321,14 +439,6 @@ export class PeopleComponent {
     });
   }
 
-  formatLT(seconds: number | null): string {
-    if (seconds === null || seconds === undefined) return '—';
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${(seconds / 60).toFixed(0)}min`;
-    if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}h`;
-    return `${(seconds / 86400).toFixed(1)}d`;
-  }
-
   pickGitLab(s: MergeSuggestion): Identity {
     return s.a.kind === 'gitlab' ? s.a : s.b;
   }
@@ -352,16 +462,14 @@ export class PeopleComponent {
       })
       .subscribe({
         next: () => {
-          this.snack.open(`Pessoa criada e ${gl.kind}/${jr.kind} vinculados`, 'OK', {
-            duration: 3000,
-          });
+          this.snack.open(
+            `Pessoa criada e ${gl.kind}/${jr.kind} vinculados`,
+            'OK',
+            { duration: 3000 },
+          );
           this.reload();
         },
-        error: (err) => {
-          this.snack.open(`Erro: ${err?.error ?? err?.message ?? err}`, 'OK', {
-            duration: 5000,
-          });
-        },
+        error: (err) => this.handleError(err),
       });
   }
 
@@ -380,11 +488,45 @@ export class PeopleComponent {
           });
           this.reload();
         },
-        error: (err) => {
-          this.snack.open(`Erro: ${err?.error ?? err?.message ?? err}`, 'OK', {
-            duration: 5000,
-          });
-        },
+        error: (err) => this.handleError(err),
       });
+  }
+
+  onDropOnPerson(
+    event: CdkDragDrop<PersonWithIdentities, Identity[], Identity>,
+    person: PersonWithIdentities,
+  ): void {
+    // Tipos garantem que veio da coluna unlinked (Identity[]).
+    const identity = event.item.data;
+    if (!identity) return;
+
+    this.api
+      .linkIdentity(identity.id, { personId: person.id, linkedBy: 'ui' })
+      .subscribe({
+        next: () => {
+          this.snack.open(
+            `${identity.kind}:${identity.externalUsername} → ${person.displayName}`,
+            'OK',
+            { duration: 3000 },
+          );
+          this.reload();
+        },
+        error: (err) => this.handleError(err),
+      });
+  }
+
+  formatLT(seconds: number | null): string {
+    if (seconds === null || seconds === undefined) return '—';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${(seconds / 60).toFixed(0)}min`;
+    if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}h`;
+    return `${(seconds / 86400).toFixed(1)}d`;
+  }
+
+  private handleError(err: unknown): void {
+    const e = err as { error?: string; message?: string };
+    this.snack.open(`Erro: ${e?.error ?? e?.message ?? err}`, 'OK', {
+      duration: 5000,
+    });
   }
 }
