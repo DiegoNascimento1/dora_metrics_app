@@ -1,0 +1,66 @@
+// Tier badges DORA — pequenos chips com micro-interação "respirando".
+// Anti-padrão evitado: não piscam, não tocam som, não viram glitter.
+//
+// Cor sozinha não basta (WCAG): pareada com ícone Material Symbol
+// específico de cada tier no template.
+
+@keyframes tier-breathe {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  50% {
+    transform: scale(1.015);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+  }
+}
+
+@mixin tier-base {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+  color: var(--color-text-inverse);
+  transition: transform var(--transition-base);
+}
+
+.tier-elite,
+.tier-high,
+.tier-medium,
+.tier-low,
+.tier-insufficient_data,
+.tier-na {
+  @include tier-base;
+}
+
+.tier-elite {
+  background: var(--color-tier-elite);
+  animation: tier-breathe 4s ease-in-out infinite;
+}
+.tier-high {
+  background: var(--color-tier-high);
+}
+.tier-medium {
+  background: var(--color-tier-medium);
+  color: #1f2937; // contraste contra o âmbar
+}
+.tier-low {
+  background: var(--color-tier-low);
+}
+.tier-insufficient_data,
+.tier-na {
+  background: var(--color-tier-na);
+}
+
+// Respeita prefers-reduced-motion — acessibilidade não-negociável.
+@media (prefers-reduced-motion: reduce) {
+  .tier-elite {
+    animation: none;
+  }
+}

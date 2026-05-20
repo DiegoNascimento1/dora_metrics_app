@@ -1,19 +1,90 @@
+@use 'styles/tokens';
+@use 'styles/tier-badge';
+
 /* DORA Metrics — estilos globais */
 
 html, body {
   height: 100%;
   margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  background: var(--mat-sys-surface);
-  color: var(--mat-sys-on-surface);
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-feature-settings: 'cv11', 'ss01'; /* Inter: numerais alt + alt-a */
 }
 
 * {
   box-sizing: border-box;
 }
 
+code, pre {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: var(--color-brand);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+a:hover {
+  color: var(--color-brand-hover);
+  text-decoration: underline;
+}
+
 .container {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 24px;
+  padding: var(--space-5);
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-primary);
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Cards Material com elevação consistente */
+mat-card {
+  box-shadow: var(--shadow-sm) !important;
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-bg-elevated) !important;
+}
+
+mat-card-title {
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+}
+
+/* Drag-and-drop visual feedback (CDK) */
+.cdk-drag-preview {
+  box-shadow: var(--shadow-lg);
+  opacity: 0.95;
+  transform: rotate(-1deg);
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.cdk-drag-animating {
+  transition: transform var(--transition-base);
+}
+
+.drop-zone-active {
+  background: var(--color-tier-high-bg) !important;
+  border-color: var(--color-tier-high) !important;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
