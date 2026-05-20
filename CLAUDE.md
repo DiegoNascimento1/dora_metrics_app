@@ -24,7 +24,7 @@ A escolha de MCP para o Jira segue dois objetivos: (a) padronizar o acesso a dad
 ## Stack
 
 - **Backend:** Go **1.26** — `chi`, `pgx/v5`, `sqlc`, `asynq`, `zerolog`. Ver [ADR 0001](docs/adr/0001-stack-go-angular.md).
-- **Frontend:** Angular **22** (standalone) — Angular Material, `ng2-charts`, `@ngrx/signals`. Node **24 LTS** no toolchain. Ver [ADR 0001](docs/adr/0001-stack-go-angular.md).
+- **Frontend:** Angular **21** (standalone, `latest` no npm; Angular 22 em RC) — Angular Material, `ng2-charts`, signals nativos do Angular. TypeScript ~5.9. Node **24 LTS** no toolchain. Ver [ADR 0001](docs/adr/0001-stack-go-angular.md).
 - **Banco:** PostgreSQL **18** puro (sem TimescaleDB no MVP). Ver [ADR 0002](docs/adr/0002-database-postgresql.md).
 - **Contrato API:** OpenAPI; types do front gerados via `openapi-typescript`.
 - **Layout do repo:** monorepo com `backend/` e `frontend/`; spec em `openapi.yaml` na raiz.

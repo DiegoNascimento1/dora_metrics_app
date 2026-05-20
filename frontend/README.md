@@ -1,13 +1,14 @@
-# Frontend — Angular 22
+# Frontend — Angular 21
 
 Dashboard da plataforma DORA Metrics.
 
 ## Stack
 
-- Angular 22 (standalone components, signals, zoneless change detection)
+- Angular 21 (standalone components, signals, zoneless change detection)
 - Angular Material (tema `azure-blue`)
 - Chart.js + ng2-charts
-- @ngrx/signals para estado feature-scoped
+- Signals nativos do Angular (NgRx signals será adicionado quando houver versão compatível com Angular 21+)
+- TypeScript 5.9
 - Node 24 LTS no toolchain
 
 ## Comandos

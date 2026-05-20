@@ -6,7 +6,7 @@ Veja o estudo completo em [docs/](docs/README.md) e o contexto em [CLAUDE.md](CL
 ## Stack (maio/2026)
 
 - **Backend:** Go 1.26 — chi, pgx/v5, sqlc, asynq
-- **Frontend:** Angular 22 (standalone) — Angular Material, ng2-charts, NgRx signals — Node 24 LTS
+- **Frontend:** Angular 21 (standalone, `latest` no npm; Angular 22 em RC) — Angular Material, ng2-charts, signals nativos — TypeScript 5.9 — Node 24 LTS
 - **Banco:** PostgreSQL 18
 - **Fila:** Redis (asynq)
 

@@ -89,9 +89,12 @@ dora_metrics_app/
 **Versões alvo (Fase 0, maio/2026):**
 
 - **Go: `1.26`** (1.26.3 lançado 2026-05-07)
-- **Angular: `22`** (lançado mai/2026; alternativa LTS = Angular 20, suportada até nov/2026)
+- **Angular: `21`** (`latest` no npm em 2026-05-19; Angular 22 ainda em RC — `next: 22.0.0-rc.0`. Migrar para 22 quando atingir GA.)
 - **Node.js (toolchain do front): `24 LTS`**
+- **TypeScript: `~5.9`** (Angular 21 exige TS `>= 5.9 < 6.0`)
 - **PostgreSQL: `18`** (ver [ADR 0002](0002-database-postgresql.md))
+
+**Nota sobre @ngrx/signals:** removido do MVP porque a versão mais recente (v19) tem peer dependency em `@angular/core@^19`. Adicionar quando uma release compatível com Angular 21+ for publicada. Enquanto isso, usar `signal()` nativo do `@angular/core`.
 
 **Bibliotecas Go iniciais (pinadas):**
 
