@@ -132,6 +132,29 @@ type PlatformMergeRequest struct {
 	RawPayload      []byte             `json:"raw_payload"`
 }
 
+type PlatformPerson struct {
+	ID           uuid.UUID `json:"id"`
+	TenantID     uuid.UUID `json:"tenant_id"`
+	DisplayName  string    `json:"display_name"`
+	PrimaryEmail *string   `json:"primary_email"`
+	AvatarUrl    *string   `json:"avatar_url"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type PlatformPersonIdentity struct {
+	ID               uuid.UUID          `json:"id"`
+	TenantID         uuid.UUID          `json:"tenant_id"`
+	PersonID         pgtype.UUID        `json:"person_id"`
+	SourceInstanceID pgtype.UUID        `json:"source_instance_id"`
+	Kind             string             `json:"kind"`
+	ExternalID       *string            `json:"external_id"`
+	ExternalUsername string             `json:"external_username"`
+	ExternalEmail    *string            `json:"external_email"`
+	LinkedAt         pgtype.Timestamptz `json:"linked_at"`
+	LinkedBy         *string            `json:"linked_by"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
 type PlatformProject struct {
 	ID                   uuid.UUID          `json:"id"`
 	TenantID             uuid.UUID          `json:"tenant_id"`

@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -16,6 +17,7 @@ type Querier interface {
 	// decidir se devolve NULL na API).
 	ChangeFailureRateInWindow(ctx context.Context, arg ChangeFailureRateInWindowParams) (ChangeFailureRateInWindowRow, error)
 	CountSuccessfulProductionDeploymentsInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsInWindowParams) (int64, error)
+	CreatePerson(ctx context.Context, arg CreatePersonParams) (PlatformPerson, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
 	CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (PlatformTenant, error)
@@ -26,12 +28,21 @@ type Querier interface {
 	// finished_at está em (incident.created_at - lookback, incident.created_at].
 	// Usado pelo time-window linking de CFR (default lookback = 24h).
 	FindDeploymentForIncident(ctx context.Context, arg FindDeploymentForIncidentParams) (uuid.UUID, error)
+	// Auto-match heurístico: identidades com mesmo email (ignorando case).
+	FindIdentitiesByEmail(ctx context.Context, arg FindIdentitiesByEmailParams) ([]PlatformPersonIdentity, error)
+	// Auto-match heurístico: identidades com mesmo username (ignorando case),
+	// entre diferentes kinds. Usado para sugerir merges de "alice" do GitLab com
+	// "alice" do Jira quando emails não estão disponíveis.
+	FindIdentitiesByUsername(ctx context.Context, arg FindIdentitiesByUsernameParams) ([]PlatformPersonIdentity, error)
+	// Auto-match: dado um email, devolve a person que casa.
+	FindPersonByEmail(ctx context.Context, arg FindPersonByEmailParams) (PlatformPerson, error)
 	GetClassificationThreshold(ctx context.Context, tenantID uuid.UUID) (PlatformClassificationThreshold, error)
 	GetFirstSourceInstanceForTenantKind(ctx context.Context, arg GetFirstSourceInstanceForTenantKindParams) (PlatformSourceInstance, error)
 	// Encontra o projeto pelo external_id assumindo source kind='gitlab'.
 	// Em multi-tenant com múltiplos GitLab e overlap de IDs, retorna o mais antigo.
 	GetGitLabProjectByExternalID(ctx context.Context, externalID string) (PlatformProject, error)
 	GetLatestMetricWindow(ctx context.Context, arg GetLatestMetricWindowParams) (MetricsMetricWindow, error)
+	GetPerson(ctx context.Context, id uuid.UUID) (PlatformPerson, error)
 	GetProductionEnvironmentIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	GetProject(ctx context.Context, id uuid.UUID) (PlatformProject, error)
 	GetProjectByExternalID(ctx context.Context, arg GetProjectByExternalIDParams) (PlatformProject, error)
@@ -44,17 +55,23 @@ type Querier interface {
 	// COALESCE para 0 quando sample_size = 0 (PERCENTILE_CONT retorna NULL nesse caso).
 	// O caller DEVE checar sample_size > 0 antes de usar median_seconds.
 	LeadTimeMedianSecondsInWindow(ctx context.Context, arg LeadTimeMedianSecondsInWindowParams) (LeadTimeMedianSecondsInWindowRow, error)
+	LinkIdentityToPerson(ctx context.Context, arg LinkIdentityToPersonParams) (PlatformPersonIdentity, error)
 	ListActiveProjects(ctx context.Context) ([]PlatformProject, error)
 	// Projects cujos jira_project_keys contêm a chave passada (case-sensitive).
 	// Usado por webhook Jira para identificar quais nossos projetos refrescar.
 	ListActiveProjectsByJiraProjectKey(ctx context.Context, jiraProjectKey string) ([]PlatformProject, error)
 	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]PlatformEnvironment, error)
+	// Backfill: usernames únicos que já apareceram em merge_request.author_username
+	// ou deployment.triggered_by, restrito ao tenant via JOIN com project.
+	ListGitlabUsernamesFromEvents(ctx context.Context, tenantID uuid.UUID) ([]string, error)
+	ListIdentitiesByPerson(ctx context.Context, personID pgtype.UUID) ([]PlatformPersonIdentity, error)
 	// Incidents cujos jira_project_key estão no array do projeto. Usado pelo
 	// linking incident ↔ deployment e pelos cálculos por janela.
 	ListIncidentsForProject(ctx context.Context, projectID uuid.UUID) ([]PlatformIncident, error)
 	// MRs do projeto cujo merged_at cai no intervalo (gt, lte]. Usado para
 	// atribuir MRs ao deployment que "fechou" aquele intervalo de tempo.
 	ListMergedMRsBetween(ctx context.Context, arg ListMergedMRsBetweenParams) ([]PlatformMergeRequest, error)
+	ListPeople(ctx context.Context, tenantID uuid.UUID) ([]PlatformPerson, error)
 	// Deployments de produção do projeto ordenados por finished_at ASC.
 	// Usado pela correlação MR ↔ deployment.
 	ListProductionDeploymentsForProject(ctx context.Context, projectID uuid.UUID) ([]ListProductionDeploymentsForProjectRow, error)
@@ -64,6 +81,7 @@ type Querier interface {
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)
+	ListUnlinkedIdentities(ctx context.Context, tenantID uuid.UUID) ([]PlatformPersonIdentity, error)
 	// Fila do processamento incremental — usa o índice parcial
 	// raw_event_pending_idx (processed_at IS NULL).
 	ListUnprocessedRawEvents(ctx context.Context, batchSize int32) ([]RawRawEvent, error)
@@ -71,6 +89,7 @@ type Querier interface {
 	// resolvidos na janela. NULL quando não houver amostra; caller checa sample.
 	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
 	MarkRawEventProcessed(ctx context.Context, arg MarkRawEventProcessedParams) error
+	UnlinkIdentity(ctx context.Context, id uuid.UUID) error
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpsertClassificationThreshold(ctx context.Context, arg UpsertClassificationThresholdParams) (PlatformClassificationThreshold, error)
 	UpsertDeployment(ctx context.Context, arg UpsertDeploymentParams) (PlatformDeployment, error)
@@ -81,6 +100,9 @@ type Querier interface {
 	UpsertMergeRequest(ctx context.Context, arg UpsertMergeRequestParams) (PlatformMergeRequest, error)
 	// Insere uma nova versão da janela (não substitui histórico).
 	UpsertMetricWindow(ctx context.Context, arg UpsertMetricWindowParams) (MetricsMetricWindow, error)
+	// Idempotente em (tenant_id, kind, external_username). Atualiza external_email
+	// e external_id no conflito; preserva person_id já vinculado.
+	UpsertPersonIdentity(ctx context.Context, arg UpsertPersonIdentityParams) (PlatformPersonIdentity, error)
 }
 
 var _ Querier = (*Queries)(nil)
