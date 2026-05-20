@@ -19,6 +19,29 @@ WHERE d.project_id = $1
   AND d.status = 'success'
   AND d.finished_at >= $2;
 
+-- name: ChangeFailureRateInWindow :one
+-- (deploys com >= 1 incident vinculado) / (deploys de produção bem-sucedidos)
+-- na janela. Retorna 0 quando não há amostra (caller usa sample_size para
+-- decidir se devolve NULL na API).
+SELECT
+  COALESCE(
+    CAST(SUM(CASE WHEN linked_count > 0 THEN 1 ELSE 0 END) AS numeric)
+      / NULLIF(COUNT(*), 0),
+    0
+  ) AS cfr,
+  COUNT(*) AS sample_size
+FROM (
+  SELECT d.id, COUNT(dil.incident_id) AS linked_count
+  FROM platform.deployment d
+  JOIN platform.environment e ON e.id = d.environment_id
+  LEFT JOIN platform.deployment_incident_link dil ON dil.deployment_id = d.id
+  WHERE d.project_id = sqlc.arg(project_id)
+    AND e.is_production
+    AND d.status = 'success'
+    AND d.finished_at >= sqlc.arg(finished_since)
+  GROUP BY d.id
+) AS by_deploy;
+
 -- name: LeadTimeMedianSecondsInWindow :one
 -- Mediana de (deploy.finished_at - mr.first_commit_at) para os MRs
 -- atribuídos a deployments de produção bem-sucedidos na janela.

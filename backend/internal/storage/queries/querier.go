@@ -11,10 +11,19 @@ import (
 )
 
 type Querier interface {
+	// (deploys com >= 1 incident vinculado) / (deploys de produção bem-sucedidos)
+	// na janela. Retorna 0 quando não há amostra (caller usa sample_size para
+	// decidir se devolve NULL na API).
+	ChangeFailureRateInWindow(ctx context.Context, arg ChangeFailureRateInWindowParams) (ChangeFailureRateInWindowRow, error)
 	CountSuccessfulProductionDeploymentsInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsInWindowParams) (int64, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
 	CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (PlatformTenant, error)
+	// Acha o deployment de produção bem-sucedido mais recente do projeto cujo
+	// finished_at está em (incident.created_at - lookback, incident.created_at].
+	// Usado pelo time-window linking de CFR (default lookback = 24h).
+	FindDeploymentForIncident(ctx context.Context, arg FindDeploymentForIncidentParams) (uuid.UUID, error)
+	GetFirstSourceInstanceForTenantKind(ctx context.Context, arg GetFirstSourceInstanceForTenantKindParams) (PlatformSourceInstance, error)
 	GetLatestMetricWindow(ctx context.Context, arg GetLatestMetricWindowParams) (MetricsMetricWindow, error)
 	GetProductionEnvironmentIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	GetProject(ctx context.Context, id uuid.UUID) (PlatformProject, error)
@@ -29,6 +38,9 @@ type Querier interface {
 	LeadTimeMedianSecondsInWindow(ctx context.Context, arg LeadTimeMedianSecondsInWindowParams) (LeadTimeMedianSecondsInWindowRow, error)
 	ListActiveProjects(ctx context.Context) ([]PlatformProject, error)
 	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]PlatformEnvironment, error)
+	// Incidents cujos jira_project_key estão no array do projeto. Usado pelo
+	// linking incident ↔ deployment e pelos cálculos por janela.
+	ListIncidentsForProject(ctx context.Context, projectID uuid.UUID) ([]PlatformIncident, error)
 	// MRs do projeto cujo merged_at cai no intervalo (gt, lte]. Usado para
 	// atribuir MRs ao deployment que "fechou" aquele intervalo de tempo.
 	ListMergedMRsBetween(ctx context.Context, arg ListMergedMRsBetweenParams) ([]PlatformMergeRequest, error)
@@ -38,10 +50,15 @@ type Querier interface {
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)
+	// Média (segundos) de (resolved_at - created_at) para incidents do projeto
+	// resolvidos na janela. NULL quando não houver amostra; caller checa sample.
+	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpsertDeployment(ctx context.Context, arg UpsertDeploymentParams) (PlatformDeployment, error)
+	UpsertDeploymentIncidentLink(ctx context.Context, arg UpsertDeploymentIncidentLinkParams) error
 	UpsertDeploymentMRLink(ctx context.Context, arg UpsertDeploymentMRLinkParams) error
 	UpsertEnvironment(ctx context.Context, arg UpsertEnvironmentParams) (PlatformEnvironment, error)
+	UpsertIncident(ctx context.Context, arg UpsertIncidentParams) (PlatformIncident, error)
 	UpsertMergeRequest(ctx context.Context, arg UpsertMergeRequestParams) (PlatformMergeRequest, error)
 	// Insere uma nova versão da janela (não substitui histórico).
 	UpsertMetricWindow(ctx context.Context, arg UpsertMetricWindowParams) (MetricsMetricWindow, error)

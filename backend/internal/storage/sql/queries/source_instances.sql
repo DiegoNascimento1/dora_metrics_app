@@ -10,3 +10,10 @@ SELECT * FROM platform.source_instance WHERE id = $1;
 SELECT * FROM platform.source_instance
 WHERE tenant_id = $1
 ORDER BY created_at;
+
+-- name: GetFirstSourceInstanceForTenantKind :one
+SELECT * FROM platform.source_instance
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND kind = sqlc.arg(kind)
+ORDER BY created_at
+LIMIT 1;

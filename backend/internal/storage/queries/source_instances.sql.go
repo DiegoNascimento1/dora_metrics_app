@@ -46,6 +46,34 @@ func (q *Queries) CreateSourceInstance(ctx context.Context, arg CreateSourceInst
 	return i, err
 }
 
+const getFirstSourceInstanceForTenantKind = `-- name: GetFirstSourceInstanceForTenantKind :one
+SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at FROM platform.source_instance
+WHERE tenant_id = $1
+  AND kind = $2
+ORDER BY created_at
+LIMIT 1
+`
+
+type GetFirstSourceInstanceForTenantKindParams struct {
+	TenantID uuid.UUID `json:"tenant_id"`
+	Kind     string    `json:"kind"`
+}
+
+func (q *Queries) GetFirstSourceInstanceForTenantKind(ctx context.Context, arg GetFirstSourceInstanceForTenantKindParams) (PlatformSourceInstance, error) {
+	row := q.db.QueryRow(ctx, getFirstSourceInstanceForTenantKind, arg.TenantID, arg.Kind)
+	var i PlatformSourceInstance
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Kind,
+		&i.BaseUrl,
+		&i.DisplayName,
+		&i.AuthRef,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSourceInstance = `-- name: GetSourceInstance :one
 SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at FROM platform.source_instance WHERE id = $1
 `
