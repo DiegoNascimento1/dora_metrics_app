@@ -183,11 +183,7 @@ docker compose run --rm cli project add \\
         color: #888;
         margin: 16px 0;
       }
-      .tier-elite { background: #2e7d32; color: white; }
-      .tier-high { background: #1976d2; color: white; }
-      .tier-medium { background: #f9a825; color: black; }
-      .tier-low { background: #c62828; color: white; }
-      .tier-insufficient_data { background: #757575; color: white; }
+      /* tier-* classes vêm dos estilos globais (src/styles/_tier-badge.scss) */
     `,
   ],
 })

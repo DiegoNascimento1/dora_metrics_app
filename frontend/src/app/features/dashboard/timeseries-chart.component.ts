@@ -21,6 +21,12 @@ import { TimeseriesPoint } from '../../core/api/api.types';
 
 Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
+function getCssVar(name: string, fallback: string): string {
+  if (typeof getComputedStyle === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v.trim() || fallback;
+}
+
 @Component({
   selector: 'app-timeseries-chart',
   standalone: true,
@@ -61,8 +67,9 @@ export class TimeseriesChartComponent {
         {
           label: 'Deploys',
           data: data.map((p) => p.deployCount),
-          backgroundColor: '#1976d2',
-          borderRadius: 2,
+          backgroundColor: getCssVar('--color-brand', '#1e3a8a'),
+          borderRadius: 3,
+          maxBarThickness: 22,
         },
       ],
     };
