@@ -27,9 +27,6 @@ backend/*.test
 backend/dist/
 backend/vendor/
 
-# sqlc generated (gera no build/CI; não versionar)
-backend/internal/storage/queries/
-
 # Node / Angular
 frontend/node_modules/
 frontend/.angular/
