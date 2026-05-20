@@ -91,7 +91,7 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 - [x] Endpoints REST: `GET/POST /api/v1/people`, `GET /api/v1/identities/unlinked`, `GET /api/v1/identities/automatch`, `POST /api/v1/identities/{id}/link`
 - [x] CLI: `cli people backfill | list-unlinked | create | link | automatch --tenant X`
 - [x] Frontend: tela "Pessoas" (`/people`) com sugestões automatch, lista de pessoas vinculadas e identidades não-vinculadas. Botões "Aplicar sugestão" (cria pessoa + linka 2 identities) e "Criar nova pessoa" (a partir de 1 identidade)
-- [ ] Frontend: UX de **drag-and-drop** entre identidades (atualmente botões; D&D fica para o slice de polish do Design Track)
+- [x] Frontend: UX de **drag-and-drop** entre identidades — CDK drag-drop arrastando da coluna "Não vinculadas" para o card de uma pessoa; com hover state "drop-zone-active" tingindo o card alvo
 - [x] Refactor: `merge_request.author_person_id` + `deployment.triggerer_person_id` (migration 0007) populados por `PropagatePersonToMergeRequests` / `PropagatePersonToDeployments`. Propagação automática após `LinkIdentityToPerson` (API + CLI) + CLI manual `cli people propagate`
 - [x] Métricas por pessoa: `GET /api/v1/people/{id}/metrics?window=30d` (deploys triggered, lead time mediano, incidents vinculados). Render inline em cada person card no `/people`. Caveat ético registrado no endpoint + OpenAPI
 
@@ -137,26 +137,26 @@ A partir daqui, evolução contínua sem big bangs. Backlog:
 
 Não pertencem a uma fase específica; evoluem em paralelo.
 
-### Design UX/UI — corporativo com pegada de gamificação — Pendente
+### Design UX/UI — corporativo com pegada de gamificação — 🟡 Base entregue
 
 **Princípio:** a plataforma é interna e tem uma audiência mista (engenharia, EM, direção). O visual precisa transmitir **confiança e seriedade corporativa** quando exposto em reunião de C-level, mas **engajar o time de eng** no dia-a-dia — DORA é um espelho, e times só olham num espelho que dá feedback emocional.
 
 #### Identidade visual (base corporativa)
 
-- [ ] **Design system** com tokens versionados (cores, espaçamento, tipografia). Base Material Design 3 + customização da paleta empresarial
-- [ ] Paleta: neutros sóbrios (azul-escuro corporativo, cinza-grafite, off-white) + **acentos vivos reservados pra status** (Elite verde, High azul, Medium âmbar, Low vermelho)
-- [ ] Tipografia: pareamento sem-serifa moderna (Inter / IBM Plex Sans) com mono pra SHAs/IDs (JetBrains Mono)
-- [ ] Tema **claro + escuro** com persistência por usuário; transição suave
-- [ ] WCAG AA garantido (contraste 4.5:1+ em todo texto, foco visível em todo interativo)
-- [ ] Iconografia consistente — Material Symbols (variable, peso ajustável)
-- [ ] Empty states, loading skeletons e error states desenhados (não placeholders genéricos do Material)
-- [ ] Logo + favicon + open graph (apresentável em link compartilhado)
+- [x] **Design system** com tokens versionados em [src/styles/_tokens.scss](../frontend/src/styles/_tokens.scss) (cores, espaçamento, tipografia, sombras, radius, transições)
+- [x] Paleta: neutros sóbrios (navy `#1e3a8a`, slate-graphite, off-white) + **acentos reservados pra status** (Elite verde sóbrio, High azul, Medium âmbar, Low vermelho refinado)
+- [x] Tipografia: Inter (variable) + JetBrains Mono pra SHAs/IDs, carregados via Google Fonts em [index.html](../frontend/src/index.html)
+- [ ] Tema **claro + escuro** com persistência — tokens já preparados para `[data-theme="dark"]`, falta toggle UI + storage
+- [x] WCAG AA: paleta calibrada (Elite verde escuro sobre branco; chip Medium âmbar usa texto preto para contraste). Foco visível: pendente revisar todos os interativos
+- [x] Iconografia: Material Symbols Outlined (variable) carregado globalmente
+- [ ] Empty states, loading skeletons e error states desenhados (mat-spinner básico hoje; falta polish)
+- [ ] Logo + favicon + open graph
 
 #### Camada de gamificação (engajamento)
 
 Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunca métrica punitiva.
 
-- [ ] **Tier badges animados** — chip Elite/High/Medium/Low com micro-interação na atualização (não piscar, só "respirar" sutil). Cor + textura + ícone para acessibilidade além da cor
+- [x] **Tier badges animados** — chip Elite tem animação `tier-breathe` 4s (scale 1.000→1.015, soft glow); respeita `prefers-reduced-motion`. Pendente: pareamento com ícone Material por tier (cor sozinha não basta para acessibilidade)
 - [ ] **Streaks** — "23 dias sem Change Failure" com fogo emoji ou ícone de chama; quebra de streak mostra duração anterior + botão "retomar"
 - [ ] **Achievements / conquistas** (desbloqueáveis por time):
     - 🚀 *First Elite Month* — primeiro mês inteiro classificação Elite combinada
