@@ -121,6 +121,8 @@ func main() {
 			peopleLink(ctx, q, rest)
 		case "automatch":
 			peopleAutomatch(ctx, q, rest)
+		case "propagate":
+			peoplePropagate(ctx, q, rest)
 		default:
 			die("unknown subcommand: people %s", sub)
 		}
@@ -508,7 +510,37 @@ func peopleLink(ctx context.Context, q *queries.Queries, args []string) {
 	if err != nil {
 		die("link identity: %v", err)
 	}
-	emitJSON(row)
+
+	// Propagação imediata: atualiza eventos já existentes que carregam o
+	// username dessa identidade para apontar pra person.
+	mrs, _ := q.PropagatePersonToMergeRequests(ctx)
+	deps, _ := q.PropagatePersonToDeployments(ctx)
+
+	emitJSON(map[string]any{
+		"identity":              row,
+		"propagated_mrs":        mrs,
+		"propagated_deployments": deps,
+	})
+}
+
+func peoplePropagate(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("people propagate", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug (informativo; propagação é global por enquanto)")
+	_ = fs.Parse(args)
+	_ = *tenantSlug // o propagate atual é tenant-agnóstico via JOIN; futuro: scopear
+
+	mrs, err := q.PropagatePersonToMergeRequests(ctx)
+	if err != nil {
+		die("propagate to MRs: %v", err)
+	}
+	deps, err := q.PropagatePersonToDeployments(ctx)
+	if err != nil {
+		die("propagate to deployments: %v", err)
+	}
+	emitJSON(map[string]any{
+		"propagated_mrs":         mrs,
+		"propagated_deployments": deps,
+	})
 }
 
 func peopleAutomatch(ctx context.Context, q *queries.Queries, args []string) {
@@ -649,5 +681,6 @@ Usage:
   cli people list-unlinked --tenant X
   cli people create --tenant X --name "Alice Doe" [--email alice@acme.com]
   cli people link --identity UUID --person UUID
-  cli people automatch --tenant X`)
+  cli people automatch --tenant X
+  cli people propagate [--tenant X]    # backfill author_person_id em MRs/deploys`)
 }

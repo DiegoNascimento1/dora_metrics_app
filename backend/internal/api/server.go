@@ -60,6 +60,7 @@ func (s *Server) routes() {
 
 		r.Get("/people", s.handleListPeople())
 		r.Post("/people", s.handleCreatePerson())
+		r.Get("/people/{personId}/metrics", s.handlePersonMetrics())
 		r.Get("/identities/unlinked", s.handleListUnlinkedIdentities())
 		r.Get("/identities/automatch", s.handleAutomatch())
 		r.Post("/identities/{identityId}/link", s.handleLinkIdentity())

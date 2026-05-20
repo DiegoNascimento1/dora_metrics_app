@@ -177,6 +177,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/Person"
 
+  /api/v1/people/{personId}/metrics:
+    get:
+      tags: [people, metrics]
+      summary: Métricas DORA-style atribuídas a uma pessoa
+      description: |
+        Use para coaching/mentoria. NÃO use para ranking punitivo —
+        DORA é métrica de time. Ver docs/01-dora-metrics.md.
+      parameters:
+        - in: path
+          name: personId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonMetrics"
+        "404":
+          description: pessoa não encontrada
+
   /api/v1/identities/unlinked:
     get:
       tags: [identities]
@@ -489,6 +519,29 @@ components:
           items:
             type: string
             format: uuid
+
+    PersonMetrics:
+      type: object
+      required: [personId, windowDays, deploymentsTriggered, leadTimeSampleSize, incidentsLinked]
+      properties:
+        personId:
+          type: string
+          format: uuid
+        windowDays:
+          type: integer
+        deploymentsTriggered:
+          type: integer
+          format: int64
+        leadTimeMedianSeconds:
+          type: integer
+          format: int64
+          nullable: true
+        leadTimeSampleSize:
+          type: integer
+          format: int64
+        incidentsLinked:
+          type: integer
+          format: int64
 
     MergeSuggestion:
       type: object

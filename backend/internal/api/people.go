@@ -215,6 +215,104 @@ func (s *Server) handleAutomatch() http.HandlerFunc {
 	}
 }
 
+// personMetricsDTO traz métricas DORA-style atribuídas a uma pessoa.
+//
+// Caveat ético: ver docs/01-dora-metrics.md e docs/07-roadmap.md § Fase 3.5.
+// Use para coaching/mentoria, não para ranking punitivo.
+type personMetricsDTO struct {
+	PersonID              string `json:"personId"`
+	WindowDays            int    `json:"windowDays"`
+	DeploymentsTriggered  int64  `json:"deploymentsTriggered"`
+	LeadTimeMedianSeconds *int64 `json:"leadTimeMedianSeconds"`
+	LeadTimeSampleSize    int64  `json:"leadTimeSampleSize"`
+	IncidentsLinked       int64  `json:"incidentsLinked"`
+}
+
+func (s *Server) handlePersonMetrics() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		personID, err := uuid.Parse(chi.URLParam(r, "personId"))
+		if err != nil {
+			http.Error(w, "invalid person id", http.StatusBadRequest)
+			return
+		}
+		windowDays := windowDays(r.URL.Query().Get("window"))
+		since := time.Now().UTC().AddDate(0, 0, -windowDays)
+
+		q := queries.New(s.db.Pool)
+
+		if _, err := q.GetPerson(r.Context(), personID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, "person not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		pidParam := pgtype.UUID{Bytes: personID, Valid: true}
+		sinceParam := pgtype.Timestamptz{Time: since, Valid: true}
+
+		deploys, err := q.CountDeploymentsByPersonInWindow(r.Context(),
+			queries.CountDeploymentsByPersonInWindowParams{
+				PersonID:      pidParam,
+				FinishedSince: sinceParam,
+			})
+		if err != nil {
+			log.Error().Err(err).Msg("count deployments by person")
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		ltRow, err := q.LeadTimeMedianByPersonInWindow(r.Context(),
+			queries.LeadTimeMedianByPersonInWindowParams{
+				PersonID:      pidParam,
+				FinishedSince: sinceParam,
+			})
+		if err != nil {
+			log.Error().Err(err).Msg("lead time by person")
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		incidents, err := q.CountIncidentsLinkedToPersonInWindow(r.Context(),
+			queries.CountIncidentsLinkedToPersonInWindowParams{
+				PersonID:      pidParam,
+				FinishedSince: sinceParam,
+			})
+		if err != nil {
+			log.Error().Err(err).Msg("incidents by person")
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		var ltMedian *int64
+		if ltRow.SampleSize > 0 {
+			v := int64(coerceLT(ltRow.MedianSeconds))
+			ltMedian = &v
+		}
+
+		writeJSON(w, http.StatusOK, personMetricsDTO{
+			PersonID:              personID.String(),
+			WindowDays:            windowDays,
+			DeploymentsTriggered:  deploys,
+			LeadTimeMedianSeconds: ltMedian,
+			LeadTimeSampleSize:    ltRow.SampleSize,
+			IncidentsLinked:       incidents,
+		})
+	}
+}
+
+// coerceLT lida com o tipo interface{} que o sqlc gera para COALESCE(...) AS median_seconds.
+func coerceLT(v interface{}) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int64:
+		return float64(x)
+	}
+	return 0
+}
+
 func (s *Server) handleLinkIdentity() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		identityID, err := uuid.Parse(chi.URLParam(r, "identityId"))
@@ -249,6 +347,15 @@ func (s *Server) handleLinkIdentity() http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+
+		// Propaga person_id para eventos já gravados.
+		if _, err := q.PropagatePersonToMergeRequests(r.Context()); err != nil {
+			log.Warn().Err(err).Msg("propagate to MRs")
+		}
+		if _, err := q.PropagatePersonToDeployments(r.Context()); err != nil {
+			log.Warn().Err(err).Msg("propagate to deployments")
+		}
+
 		writeJSON(w, http.StatusOK, toIdentityDTO(row))
 	}
 }
