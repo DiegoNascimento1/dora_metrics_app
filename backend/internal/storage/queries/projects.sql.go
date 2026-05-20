@@ -64,6 +64,39 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 	return i, err
 }
 
+const getGitLabProjectByExternalID = `-- name: GetGitLabProjectByExternalID :one
+SELECT p.id, p.tenant_id, p.team_id, p.source_instance_id, p.external_id, p.path_with_namespace, p.default_branch, p.production_env_pattern, p.incident_jql, p.jira_project_keys, p.active, p.created_at, p.last_synced_at
+FROM platform.project p
+JOIN platform.source_instance si ON si.id = p.source_instance_id
+WHERE si.kind = 'gitlab'
+  AND p.external_id = $1
+ORDER BY p.created_at
+LIMIT 1
+`
+
+// Encontra o projeto pelo external_id assumindo source kind='gitlab'.
+// Em multi-tenant com múltiplos GitLab e overlap de IDs, retorna o mais antigo.
+func (q *Queries) GetGitLabProjectByExternalID(ctx context.Context, externalID string) (PlatformProject, error) {
+	row := q.db.QueryRow(ctx, getGitLabProjectByExternalID, externalID)
+	var i PlatformProject
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.TeamID,
+		&i.SourceInstanceID,
+		&i.ExternalID,
+		&i.PathWithNamespace,
+		&i.DefaultBranch,
+		&i.ProductionEnvPattern,
+		&i.IncidentJql,
+		&i.JiraProjectKeys,
+		&i.Active,
+		&i.CreatedAt,
+		&i.LastSyncedAt,
+	)
+	return i, err
+}
+
 const getProject = `-- name: GetProject :one
 SELECT id, tenant_id, team_id, source_instance_id, external_id, path_with_namespace, default_branch, production_env_pattern, incident_jql, jira_project_keys, active, created_at, last_synced_at FROM platform.project WHERE id = $1
 `
@@ -126,6 +159,48 @@ SELECT id, tenant_id, team_id, source_instance_id, external_id, path_with_namesp
 
 func (q *Queries) ListActiveProjects(ctx context.Context) ([]PlatformProject, error) {
 	rows, err := q.db.Query(ctx, listActiveProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlatformProject{}
+	for rows.Next() {
+		var i PlatformProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.TeamID,
+			&i.SourceInstanceID,
+			&i.ExternalID,
+			&i.PathWithNamespace,
+			&i.DefaultBranch,
+			&i.ProductionEnvPattern,
+			&i.IncidentJql,
+			&i.JiraProjectKeys,
+			&i.Active,
+			&i.CreatedAt,
+			&i.LastSyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveProjectsByJiraProjectKey = `-- name: ListActiveProjectsByJiraProjectKey :many
+SELECT id, tenant_id, team_id, source_instance_id, external_id, path_with_namespace, default_branch, production_env_pattern, incident_jql, jira_project_keys, active, created_at, last_synced_at FROM platform.project
+WHERE active
+  AND $1::text = ANY(jira_project_keys)
+`
+
+// Projects cujos jira_project_keys contêm a chave passada (case-sensitive).
+// Usado por webhook Jira para identificar quais nossos projetos refrescar.
+func (q *Queries) ListActiveProjectsByJiraProjectKey(ctx context.Context, jiraProjectKey string) ([]PlatformProject, error) {
+	rows, err := q.db.Query(ctx, listActiveProjectsByJiraProjectKey, jiraProjectKey)
 	if err != nil {
 		return nil, err
 	}

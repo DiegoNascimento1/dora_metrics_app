@@ -24,6 +24,9 @@ type Querier interface {
 	// Usado pelo time-window linking de CFR (default lookback = 24h).
 	FindDeploymentForIncident(ctx context.Context, arg FindDeploymentForIncidentParams) (uuid.UUID, error)
 	GetFirstSourceInstanceForTenantKind(ctx context.Context, arg GetFirstSourceInstanceForTenantKindParams) (PlatformSourceInstance, error)
+	// Encontra o projeto pelo external_id assumindo source kind='gitlab'.
+	// Em multi-tenant com múltiplos GitLab e overlap de IDs, retorna o mais antigo.
+	GetGitLabProjectByExternalID(ctx context.Context, externalID string) (PlatformProject, error)
 	GetLatestMetricWindow(ctx context.Context, arg GetLatestMetricWindowParams) (MetricsMetricWindow, error)
 	GetProductionEnvironmentIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	GetProject(ctx context.Context, id uuid.UUID) (PlatformProject, error)
@@ -31,12 +34,16 @@ type Querier interface {
 	GetSourceInstance(ctx context.Context, id uuid.UUID) (PlatformSourceInstance, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (PlatformTenant, error)
 	GetTenantBySlug(ctx context.Context, slug string) (PlatformTenant, error)
+	InsertRawEvent(ctx context.Context, arg InsertRawEventParams) (RawRawEvent, error)
 	// Mediana de (deploy.finished_at - mr.first_commit_at) para os MRs
 	// atribuídos a deployments de produção bem-sucedidos na janela.
 	// COALESCE para 0 quando sample_size = 0 (PERCENTILE_CONT retorna NULL nesse caso).
 	// O caller DEVE checar sample_size > 0 antes de usar median_seconds.
 	LeadTimeMedianSecondsInWindow(ctx context.Context, arg LeadTimeMedianSecondsInWindowParams) (LeadTimeMedianSecondsInWindowRow, error)
 	ListActiveProjects(ctx context.Context) ([]PlatformProject, error)
+	// Projects cujos jira_project_keys contêm a chave passada (case-sensitive).
+	// Usado por webhook Jira para identificar quais nossos projetos refrescar.
+	ListActiveProjectsByJiraProjectKey(ctx context.Context, jiraProjectKey string) ([]PlatformProject, error)
 	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]PlatformEnvironment, error)
 	// Incidents cujos jira_project_key estão no array do projeto. Usado pelo
 	// linking incident ↔ deployment e pelos cálculos por janela.
@@ -50,9 +57,13 @@ type Querier interface {
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)
+	// Fila do processamento incremental — usa o índice parcial
+	// raw_event_pending_idx (processed_at IS NULL).
+	ListUnprocessedRawEvents(ctx context.Context, batchSize int32) ([]RawRawEvent, error)
 	// Média (segundos) de (resolved_at - created_at) para incidents do projeto
 	// resolvidos na janela. NULL quando não houver amostra; caller checa sample.
 	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
+	MarkRawEventProcessed(ctx context.Context, arg MarkRawEventProcessedParams) error
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpsertDeployment(ctx context.Context, arg UpsertDeploymentParams) (PlatformDeployment, error)
 	UpsertDeploymentIncidentLink(ctx context.Context, arg UpsertDeploymentIncidentLinkParams) error

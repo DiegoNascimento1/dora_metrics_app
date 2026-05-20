@@ -19,5 +19,23 @@ SELECT * FROM platform.project ORDER BY path_with_namespace;
 -- name: ListActiveProjects :many
 SELECT * FROM platform.project WHERE active ORDER BY last_synced_at NULLS FIRST;
 
+-- name: GetGitLabProjectByExternalID :one
+-- Encontra o projeto pelo external_id assumindo source kind='gitlab'.
+-- Em multi-tenant com múltiplos GitLab e overlap de IDs, retorna o mais antigo.
+SELECT p.*
+FROM platform.project p
+JOIN platform.source_instance si ON si.id = p.source_instance_id
+WHERE si.kind = 'gitlab'
+  AND p.external_id = sqlc.arg(external_id)
+ORDER BY p.created_at
+LIMIT 1;
+
+-- name: ListActiveProjectsByJiraProjectKey :many
+-- Projects cujos jira_project_keys contêm a chave passada (case-sensitive).
+-- Usado por webhook Jira para identificar quais nossos projetos refrescar.
+SELECT * FROM platform.project
+WHERE active
+  AND sqlc.arg(jira_project_key)::text = ANY(jira_project_keys);
+
 -- name: UpdateProjectLastSynced :exec
 UPDATE platform.project SET last_synced_at = $2 WHERE id = $1;
