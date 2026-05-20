@@ -62,7 +62,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** stakeholders conseguem abrir o dashboard, comparar 2 times, e identificar visualmente uma piora. Hoje conseguem ver 1 projeto por vez com tiles + curva + drill-down.
 
-## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — 🟡 Backend + REST + UI básica entregues
+## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — 🟢 ~85% (faltam só ListMembers GitLab/Jira + drag-and-drop UX)
 
 **Objetivo:** atribuir cada evento DORA (commit, MR, incident, deployment) a uma **pessoa real**, não a um username solto. Sem isso, Alice no GitLab (`alice_dev`) e Alice no Jira (`alice@acme.com`) viram dois "autores" diferentes, distorcendo per-person analytics e quem deve ser notificado em alertas.
 
@@ -92,8 +92,8 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 - [x] CLI: `cli people backfill | list-unlinked | create | link | automatch --tenant X`
 - [x] Frontend: tela "Pessoas" (`/people`) com sugestões automatch, lista de pessoas vinculadas e identidades não-vinculadas. Botões "Aplicar sugestão" (cria pessoa + linka 2 identities) e "Criar nova pessoa" (a partir de 1 identidade)
 - [ ] Frontend: UX de **drag-and-drop** entre identidades (atualmente botões; D&D fica para o slice de polish do Design Track)
-- [ ] Refactor: `merge_request.author_username`, `deployment.triggered_by` etc passam a também guardar `person_id` (nullable enquanto unlinked)
-- [ ] Métricas por pessoa: novo endpoint `/api/v1/people/{id}/metrics?window=30d` (Lead Time pessoal, frequência de incidents vinculados — usar com cautela; ver caveat abaixo)
+- [x] Refactor: `merge_request.author_person_id` + `deployment.triggerer_person_id` (migration 0007) populados por `PropagatePersonToMergeRequests` / `PropagatePersonToDeployments`. Propagação automática após `LinkIdentityToPerson` (API + CLI) + CLI manual `cli people propagate`
+- [x] Métricas por pessoa: `GET /api/v1/people/{id}/metrics?window=30d` (deploys triggered, lead time mediano, incidents vinculados). Render inline em cada person card no `/people`. Caveat ético registrado no endpoint + OpenAPI
 
 **Caveat ético/cultural:** DORA é pensado para times, não indivíduos. Métricas por pessoa servem para identificar quem precisa de mentoria, NÃO para ranking punitivo. Documentar isso em [docs/01-dora-metrics.md](01-dora-metrics.md) e marcar a tela de métricas pessoais como "modo admin/coach", não dashboard público.
 
