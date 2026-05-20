@@ -84,3 +84,12 @@ export interface CreatePersonRequest {
   avatarUrl?: string;
   identityIds?: string[];
 }
+
+export interface PersonMetrics {
+  personId: string;
+  windowDays: number;
+  deploymentsTriggered: number;
+  leadTimeMedianSeconds: number | null;
+  leadTimeSampleSize: number;
+  incidentsLinked: number;
+}

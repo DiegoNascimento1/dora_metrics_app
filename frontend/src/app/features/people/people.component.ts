@@ -15,12 +15,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { forkJoin, of, catchError, finalize } from 'rxjs';
+import { forkJoin, of, catchError, finalize, Observable } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api.client';
 import {
   Identity,
   MergeSuggestion,
+  PersonMetrics,
   PersonWithIdentities,
 } from '../../core/api/api.types';
 
@@ -120,22 +121,35 @@ import {
           } @else {
             @for (p of people(); track p.id) {
               <div class="person-row">
-                <div>
-                  <strong>{{ p.displayName }}</strong>
-                  @if (p.primaryEmail) {
-                    <span class="muted">· {{ p.primaryEmail }}</span>
-                  }
+                <div class="person-head">
+                  <div>
+                    <strong>{{ p.displayName }}</strong>
+                    @if (p.primaryEmail) {
+                      <span class="muted">· {{ p.primaryEmail }}</span>
+                    }
+                  </div>
+                  <div class="identities">
+                    @for (id of p.identities; track id.id) {
+                      <mat-chip [class]="'kind-' + id.kind">
+                        {{ id.kind }}: {{ id.externalUsername }}
+                      </mat-chip>
+                    }
+                    @if (p.identities.length === 0) {
+                      <span class="muted">(nenhuma identidade vinculada)</span>
+                    }
+                  </div>
                 </div>
-                <div class="identities">
-                  @for (id of p.identities; track id.id) {
-                    <mat-chip [class]="'kind-' + id.kind">
-                      {{ id.kind }}: {{ id.externalUsername }}
-                    </mat-chip>
-                  }
-                  @if (p.identities.length === 0) {
-                    <span class="muted">(nenhuma identidade vinculada)</span>
-                  }
-                </div>
+                @if (metricsByPerson()[p.id]; as m) {
+                  <div class="person-metrics">
+                    <span class="metric"><b>{{ m.deploymentsTriggered }}</b> deploys</span>
+                    <span class="metric">
+                      <b>{{ formatLT(m.leadTimeMedianSeconds) }}</b> LT mediano
+                      <span class="muted">({{ m.leadTimeSampleSize }})</span>
+                    </span>
+                    <span class="metric"><b>{{ m.incidentsLinked }}</b> incidents</span>
+                    <span class="muted">· últimos 30 dias</span>
+                  </div>
+                }
               </div>
             }
           }
@@ -203,14 +217,29 @@ import {
       }
       .person-row {
         display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 8px 0;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 0;
         border-bottom: 1px solid #eee;
-        align-items: center;
       }
       .person-row:last-child {
         border-bottom: none;
+      }
+      .person-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+      .person-metrics {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        font-size: 0.875rem;
+        color: #555;
+      }
+      .person-metrics .metric b {
+        color: #1976d2;
       }
       .identities {
         display: flex;
@@ -242,6 +271,7 @@ export class PeopleComponent {
   people = signal<PersonWithIdentities[]>([]);
   unlinked = signal<Identity[]>([]);
   suggestions = signal<MergeSuggestion[]>([]);
+  metricsByPerson = signal<Record<string, PersonMetrics>>({});
 
   suggestionCols = ['gitlab', 'jira', 'reason', 'action'];
   unlinkedCols = ['kind', 'username', 'email', 'action'];
@@ -267,7 +297,36 @@ export class PeopleComponent {
         this.people.set(people);
         this.unlinked.set(unlinked);
         this.suggestions.set(suggestions);
+        this.loadMetrics(people);
       });
+  }
+
+  private loadMetrics(people: PersonWithIdentities[]): void {
+    if (people.length === 0) {
+      this.metricsByPerson.set({});
+      return;
+    }
+    const requests: Record<string, Observable<PersonMetrics | null>> = {};
+    for (const p of people) {
+      requests[p.id] = this.api
+        .getPersonMetrics(p.id, '30d')
+        .pipe(catchError(() => of<PersonMetrics | null>(null)));
+    }
+    forkJoin(requests).subscribe((res) => {
+      const next: Record<string, PersonMetrics> = {};
+      for (const [id, m] of Object.entries(res)) {
+        if (m) next[id] = m;
+      }
+      this.metricsByPerson.set(next);
+    });
+  }
+
+  formatLT(seconds: number | null): string {
+    if (seconds === null || seconds === undefined) return '—';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${(seconds / 60).toFixed(0)}min`;
+    if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}h`;
+    return `${(seconds / 86400).toFixed(1)}d`;
   }
 
   pickGitLab(s: MergeSuggestion): Identity {

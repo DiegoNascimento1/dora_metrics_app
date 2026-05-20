@@ -9,6 +9,7 @@ import {
   Identity,
   MergeSuggestion,
   Person,
+  PersonMetrics,
   PersonWithIdentities,
   Project,
   TimeseriesResponse,
@@ -85,6 +86,16 @@ export class ApiClient {
     return this.http.post<Identity>(
       `${API_BASE}/identities/${identityId}/link`,
       body,
+    );
+  }
+
+  getPersonMetrics(
+    personId: string,
+    window: '7d' | '30d' | '90d' = '30d',
+  ): Observable<PersonMetrics> {
+    return this.http.get<PersonMetrics>(
+      `${API_BASE}/people/${personId}/metrics`,
+      { params: { window } },
     );
   }
 
