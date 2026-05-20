@@ -11,10 +11,11 @@ import (
 
 // Tipos de tasks. Stringly-typed para fácil debug no asynqmon.
 const (
-	TaskScanActiveProjects  = "scan:active_projects"
-	TaskCollectGitlab       = "collect:gitlab:deployments"
-	TaskCollectJira         = "collect:jira:incidents"
-	TaskComputeMetricWindow = "compute:metric_window"
+	TaskScanActiveProjects   = "scan:active_projects"
+	TaskReconcileAllProjects = "reconcile:projects"
+	TaskCollectGitlab        = "collect:gitlab:deployments"
+	TaskCollectJira          = "collect:jira:incidents"
+	TaskComputeMetricWindow  = "compute:metric_window"
 )
 
 // Filas (declaradas no asynq.Config).
@@ -25,13 +26,29 @@ const (
 )
 
 // CollectGitlabPayload é o payload da task collect:gitlab:deployments.
+//
+// BackfillDays > 0 força o coletor a buscar uma janela maior, ignorando
+// last_synced_at. Usado pelo job de reconciliação noturna.
 type CollectGitlabPayload struct {
-	ProjectID uuid.UUID `json:"project_id"`
+	ProjectID    uuid.UUID `json:"project_id"`
+	BackfillDays int       `json:"backfill_days,omitempty"`
 }
 
 // NewCollectGitlabTask constrói a task para enfileirar.
 func NewCollectGitlabTask(projectID uuid.UUID) (*asynq.Task, error) {
-	payload, err := json.Marshal(CollectGitlabPayload{ProjectID: projectID})
+	return newCollectGitlabTask(projectID, 0)
+}
+
+// NewCollectGitlabTaskWithBackfill cria a task forçando backfill de N dias.
+func NewCollectGitlabTaskWithBackfill(projectID uuid.UUID, days int) (*asynq.Task, error) {
+	return newCollectGitlabTask(projectID, days)
+}
+
+func newCollectGitlabTask(projectID uuid.UUID, backfillDays int) (*asynq.Task, error) {
+	payload, err := json.Marshal(CollectGitlabPayload{
+		ProjectID:    projectID,
+		BackfillDays: backfillDays,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -44,12 +61,25 @@ func NewCollectGitlabTask(projectID uuid.UUID) (*asynq.Task, error) {
 
 // CollectJiraPayload é o payload da task collect:jira:incidents.
 type CollectJiraPayload struct {
-	ProjectID uuid.UUID `json:"project_id"`
+	ProjectID    uuid.UUID `json:"project_id"`
+	BackfillDays int       `json:"backfill_days,omitempty"`
 }
 
 // NewCollectJiraTask constrói a task para enfileirar.
 func NewCollectJiraTask(projectID uuid.UUID) (*asynq.Task, error) {
-	payload, err := json.Marshal(CollectJiraPayload{ProjectID: projectID})
+	return newCollectJiraTask(projectID, 0)
+}
+
+// NewCollectJiraTaskWithBackfill cria a task forçando backfill de N dias.
+func NewCollectJiraTaskWithBackfill(projectID uuid.UUID, days int) (*asynq.Task, error) {
+	return newCollectJiraTask(projectID, days)
+}
+
+func newCollectJiraTask(projectID uuid.UUID, backfillDays int) (*asynq.Task, error) {
+	payload, err := json.Marshal(CollectJiraPayload{
+		ProjectID:    projectID,
+		BackfillDays: backfillDays,
+	})
 	if err != nil {
 		return nil, err
 	}

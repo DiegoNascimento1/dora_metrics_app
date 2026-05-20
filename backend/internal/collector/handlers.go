@@ -34,9 +34,49 @@ type Handlers struct {
 // Register associa os handlers a um asynq.ServeMux.
 func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskScanActiveProjects, h.HandleScanActiveProjects)
+	mux.HandleFunc(TaskReconcileAllProjects, h.HandleReconcileAll)
 	mux.HandleFunc(TaskCollectGitlab, h.HandleCollectGitlab)
 	mux.HandleFunc(TaskCollectJira, h.HandleCollectJira)
 	mux.HandleFunc(TaskComputeMetricWindow, h.HandleComputeMetricWindow)
+}
+
+// ReconcileBackfillDays é a profundidade da varredura que o job noturno força
+// (cobre janelas de webhook perdidas e curtos períodos de indisponibilidade).
+const ReconcileBackfillDays = 7
+
+// HandleReconcileAll: tick noturno que enfileira collect:gitlab e collect:jira
+// para todos os projetos ativos com BackfillDays=ReconcileBackfillDays.
+// Garante captura de eventos que webhooks/scheduler regular tenham deixado escapar.
+func (h *Handlers) HandleReconcileAll(ctx context.Context, _ *asynq.Task) error {
+	q := queries.New(h.DB.Pool)
+
+	projects, err := q.ListActiveProjects(ctx)
+	if err != nil {
+		return fmt.Errorf("list active projects: %w", err)
+	}
+
+	for _, p := range projects {
+		if task, err := NewCollectGitlabTaskWithBackfill(p.ID, ReconcileBackfillDays); err == nil {
+			if _, err := h.Asynq.EnqueueContext(ctx, task); err != nil {
+				log.Error().Err(err).Str("project_id", p.ID.String()).
+					Msg("reconcile: enqueue gitlab")
+			}
+		}
+		if len(p.JiraProjectKeys) > 0 {
+			if task, err := NewCollectJiraTaskWithBackfill(p.ID, ReconcileBackfillDays); err == nil {
+				if _, err := h.Asynq.EnqueueContext(ctx, task); err != nil {
+					log.Error().Err(err).Str("project_id", p.ID.String()).
+						Msg("reconcile: enqueue jira")
+				}
+			}
+		}
+	}
+
+	log.Info().Int("projects", len(projects)).
+		Int("backfill_days", ReconcileBackfillDays).
+		Msg("reconcile:projects fan-out complete")
+
+	return nil
 }
 
 // IncidentLinkLookback é a janela usada para atribuir um incident ao deploy
@@ -151,11 +191,19 @@ func (h *Handlers) HandleCollectGitlab(ctx context.Context, task *asynq.Task) er
 		envIDByExternal[e.ID] = row.ID
 	}
 
-	// Backfill inicial = 30d. Depois incremental a partir de last_synced_at - 1h
-	// (overlap defensivo para cobrir eventos no exato segundo da última sync).
+	// Janela de coleta:
+	//   - sem last_synced_at        -> backfill 30d (primeira vez)
+	//   - com last_synced_at        -> incremental: last_synced_at - 1h (overlap)
+	//   - BackfillDays > 0 (recon.) -> força N dias (cobre webhooks/janelas perdidas)
 	since := time.Now().Add(-30 * 24 * time.Hour)
 	if project.LastSyncedAt.Valid {
 		since = project.LastSyncedAt.Time.Add(-1 * time.Hour)
+	}
+	if payload.BackfillDays > 0 {
+		forced := time.Now().Add(-time.Duration(payload.BackfillDays) * 24 * time.Hour)
+		if forced.Before(since) {
+			since = forced
+		}
 	}
 
 	deployments, err := client.ListDeployments(ctx, project.ExternalID, gitlab.ListDeploymentsOpts{
@@ -503,10 +551,18 @@ func (h *Handlers) HandleCollectJira(ctx context.Context, task *asynq.Task) erro
 
 	source := jira.NewRESTSource(jiraInstance.BaseUrl, email, apiToken)
 
-	// Monta JQL: incident_jql do projeto + restrição aos jira_project_keys.
+	// Janela JQL:
+	//   - default 30d (cobre MTTR/CFR window que reportamos)
+	//   - BackfillDays > 0 sobrescreve
+	windowDays := 30
+	if payload.BackfillDays > windowDays {
+		windowDays = payload.BackfillDays
+	}
+	since := time.Now().UTC().AddDate(0, 0, -windowDays).Format("2006-01-02")
+
 	keys := strings.Join(quoteEach(project.JiraProjectKeys), ", ")
-	jql := fmt.Sprintf("(%s) AND project in (%s) ORDER BY created ASC",
-		project.IncidentJql, keys)
+	jql := fmt.Sprintf(`(%s) AND project in (%s) AND created >= "%s" ORDER BY created ASC`,
+		project.IncidentJql, keys, since)
 
 	issues, err := source.SearchIssues(ctx, jql, 0)
 	if err != nil {

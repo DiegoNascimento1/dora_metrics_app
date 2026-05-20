@@ -98,8 +98,9 @@ func main() {
 	log.Info().Msg("worker stopped")
 }
 
-// buildScheduler configura o asynq.Scheduler com o tick periódico
-// scan:active_projects rodando a cada 5 minutos.
+// buildScheduler configura o asynq.Scheduler com:
+//   - scan:active_projects        a cada 5 minutos (refresh incremental)
+//   - reconcile:projects          às 03:00 UTC diariamente (backfill 7d)
 //
 // Para múltiplas réplicas do worker no futuro, migrar para
 // asynq.PeriodicTaskManager (faz fencing entre instâncias).
@@ -114,10 +115,20 @@ func buildScheduler(redisOpt asynq.RedisClientOpt) (*asynq.Scheduler, error) {
 		asynq.Queue(collector.QueueDefault),
 		asynq.MaxRetry(0),
 	)
-
 	if _, err := s.Register("*/5 * * * *", scanTask); err != nil {
 		return nil, err
 	}
+
+	reconcileTask := asynq.NewTask(
+		collector.TaskReconcileAllProjects,
+		nil,
+		asynq.Queue(collector.QueueDefault),
+		asynq.MaxRetry(0),
+	)
+	if _, err := s.Register("0 3 * * *", reconcileTask); err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 
