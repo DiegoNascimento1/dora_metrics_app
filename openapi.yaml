@@ -17,6 +17,8 @@ tags:
   - name: health
   - name: metrics
   - name: projects
+  - name: people
+  - name: identities
   - name: webhooks
 
 paths:
@@ -138,6 +140,114 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Deployment"
+
+  /api/v1/people:
+    get:
+      tags: [people]
+      summary: Lista pessoas e suas identidades vinculadas
+      parameters:
+        - in: query
+          name: tenant
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PersonWithIdentities"
+    post:
+      tags: [people]
+      summary: Cria uma pessoa canônica e opcionalmente vincula identities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePersonRequest"
+      responses:
+        "201":
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+
+  /api/v1/identities/unlinked:
+    get:
+      tags: [identities]
+      summary: Lista identidades sem person_id (aguardando merge)
+      parameters:
+        - in: query
+          name: tenant
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Identity"
+
+  /api/v1/identities/automatch:
+    get:
+      tags: [identities]
+      summary: Sugestões de merge (não persiste; ver POST /identities/{id}/link)
+      parameters:
+        - in: query
+          name: tenant
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MergeSuggestion"
+
+  /api/v1/identities/{identityId}/link:
+    post:
+      tags: [identities]
+      summary: Vincula uma identidade a uma pessoa existente
+      parameters:
+        - in: path
+          name: identityId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [personId]
+              properties:
+                personId:
+                  type: string
+                  format: uuid
+                linkedBy:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Identity"
 
   /webhooks/gitlab:
     post:
@@ -301,3 +411,95 @@ components:
           nullable: true
         environmentName:
           type: string
+
+    Identity:
+      type: object
+      required: [id, kind, externalUsername]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [gitlab, jira]
+        externalId:
+          type: string
+          nullable: true
+        externalUsername:
+          type: string
+        externalEmail:
+          type: string
+          nullable: true
+        personId:
+          type: string
+          format: uuid
+          nullable: true
+        linkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        linkedBy:
+          type: string
+          nullable: true
+
+    Person:
+      type: object
+      required: [id, displayName, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        primaryEmail:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    PersonWithIdentities:
+      allOf:
+        - $ref: "#/components/schemas/Person"
+        - type: object
+          required: [identities]
+          properties:
+            identities:
+              type: array
+              items:
+                $ref: "#/components/schemas/Identity"
+
+    CreatePersonRequest:
+      type: object
+      required: [tenant, displayName]
+      properties:
+        tenant:
+          type: string
+        displayName:
+          type: string
+        primaryEmail:
+          type: string
+        avatarUrl:
+          type: string
+        identityIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    MergeSuggestion:
+      type: object
+      required: [a, b, reason, score]
+      properties:
+        a:
+          $ref: "#/components/schemas/Identity"
+        b:
+          $ref: "#/components/schemas/Identity"
+        reason:
+          type: string
+          enum: [email_exact, username_exact]
+        score:
+          type: number
