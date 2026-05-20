@@ -146,7 +146,7 @@ Não pertencem a uma fase específica; evoluem em paralelo.
 - [x] **Design system** com tokens versionados em [src/styles/_tokens.scss](../frontend/src/styles/_tokens.scss) (cores, espaçamento, tipografia, sombras, radius, transições)
 - [x] Paleta: neutros sóbrios (navy `#1e3a8a`, slate-graphite, off-white) + **acentos reservados pra status** (Elite verde sóbrio, High azul, Medium âmbar, Low vermelho refinado)
 - [x] Tipografia: Inter (variable) + JetBrains Mono pra SHAs/IDs, carregados via Google Fonts em [index.html](../frontend/src/index.html)
-- [ ] Tema **claro + escuro** com persistência — tokens já preparados para `[data-theme="dark"]`, falta toggle UI + storage
+- [x] Tema **claro + escuro** com persistência — `ThemeService` reativo (signal + `prefers-color-scheme`) + toggle na toolbar + `localStorage`. Modos: `light` / `dark` / `system` (default). Chart e Material form-fields cobertos no dark
 - [x] WCAG AA: paleta calibrada (Elite verde escuro sobre branco; chip Medium âmbar usa texto preto para contraste). Foco visível: pendente revisar todos os interativos
 - [x] Iconografia: Material Symbols Outlined (variable) carregado globalmente
 - [ ] Empty states, loading skeletons e error states desenhados (mat-spinner básico hoje; falta polish)
