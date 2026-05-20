@@ -27,10 +27,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/dora-metrics-app/backend/internal/calculator"
 	"github.com/dora-metrics-app/backend/internal/collector"
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/identities"
 	"github.com/dora-metrics-app/backend/internal/storage"
 	"github.com/dora-metrics-app/backend/internal/storage/queries"
 )
@@ -106,6 +108,21 @@ func main() {
 			emitJSON(calculator.DefaultThresholds())
 		default:
 			die("unknown subcommand: thresholds %s", sub)
+		}
+	case "people":
+		switch sub {
+		case "backfill":
+			peopleBackfill(ctx, q, rest)
+		case "list-unlinked":
+			peopleListUnlinked(ctx, q, rest)
+		case "create":
+			peopleCreate(ctx, q, rest)
+		case "link":
+			peopleLink(ctx, q, rest)
+		case "automatch":
+			peopleAutomatch(ctx, q, rest)
+		default:
+			die("unknown subcommand: people %s", sub)
 		}
 	default:
 		usage()
@@ -374,6 +391,172 @@ func thresholdsSet(ctx context.Context, q *queries.Queries, args []string) {
 	emitJSON(row)
 }
 
+// ---- people ----
+
+func peopleBackfill(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("people backfill", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug")
+	_ = fs.Parse(args)
+	if *tenantSlug == "" {
+		die("people backfill: --tenant required")
+	}
+
+	tenant, err := q.GetTenantBySlug(ctx, *tenantSlug)
+	if err != nil {
+		die("get tenant: %v", err)
+	}
+
+	usernames, err := q.ListGitlabUsernamesFromEvents(ctx, tenant.ID)
+	if err != nil {
+		die("list usernames: %v", err)
+	}
+
+	created := 0
+	for _, u := range usernames {
+		_, err := q.UpsertPersonIdentity(ctx, queries.UpsertPersonIdentityParams{
+			TenantID:         tenant.ID,
+			SourceInstanceID: pgtype.UUID{}, // backfill sintético — sem source vinculado
+			Kind:             "gitlab",
+			ExternalID:       nil,
+			ExternalUsername: u,
+			ExternalEmail:    nil,
+		})
+		if err != nil {
+			die("upsert identity %s: %v", u, err)
+		}
+		created++
+	}
+
+	emitJSON(map[string]any{
+		"tenant":             tenant.Slug,
+		"usernames_scanned":  len(usernames),
+		"identities_upserted": created,
+	})
+}
+
+func peopleListUnlinked(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("people list-unlinked", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug")
+	_ = fs.Parse(args)
+	if *tenantSlug == "" {
+		die("people list-unlinked: --tenant required")
+	}
+	tenant, err := q.GetTenantBySlug(ctx, *tenantSlug)
+	if err != nil {
+		die("get tenant: %v", err)
+	}
+	rows, err := q.ListUnlinkedIdentities(ctx, tenant.ID)
+	if err != nil {
+		die("list unlinked: %v", err)
+	}
+	emitJSON(rows)
+}
+
+func peopleCreate(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("people create", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug")
+	name := fs.String("name", "", "display name")
+	email := fs.String("email", "", "primary email (used by auto-match)")
+	avatar := fs.String("avatar", "", "avatar URL")
+	_ = fs.Parse(args)
+
+	if *tenantSlug == "" || *name == "" {
+		die("people create: --tenant and --name required")
+	}
+	tenant, err := q.GetTenantBySlug(ctx, *tenantSlug)
+	if err != nil {
+		die("get tenant: %v", err)
+	}
+
+	row, err := q.CreatePerson(ctx, queries.CreatePersonParams{
+		TenantID:     tenant.ID,
+		DisplayName:  *name,
+		PrimaryEmail: strPtr(*email),
+		AvatarUrl:    strPtr(*avatar),
+	})
+	if err != nil {
+		die("create person: %v", err)
+	}
+	emitJSON(row)
+}
+
+func peopleLink(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("people link", flag.ExitOnError)
+	identityIDStr := fs.String("identity", "", "person_identity UUID")
+	personIDStr := fs.String("person", "", "person UUID")
+	by := fs.String("by", "cli", "linked_by (audit)")
+	_ = fs.Parse(args)
+
+	if *identityIDStr == "" || *personIDStr == "" {
+		die("people link: --identity and --person required")
+	}
+
+	identityID, err := uuid.Parse(*identityIDStr)
+	if err != nil {
+		die("invalid identity uuid: %v", err)
+	}
+	personID, err := uuid.Parse(*personIDStr)
+	if err != nil {
+		die("invalid person uuid: %v", err)
+	}
+
+	row, err := q.LinkIdentityToPerson(ctx, queries.LinkIdentityToPersonParams{
+		IdentityID: identityID,
+		PersonID:   pgtype.UUID{Bytes: personID, Valid: true},
+		LinkedBy:   by,
+	})
+	if err != nil {
+		die("link identity: %v", err)
+	}
+	emitJSON(row)
+}
+
+func peopleAutomatch(ctx context.Context, q *queries.Queries, args []string) {
+	fs := flag.NewFlagSet("people automatch", flag.ExitOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug")
+	_ = fs.Parse(args)
+	if *tenantSlug == "" {
+		die("people automatch: --tenant required")
+	}
+	tenant, err := q.GetTenantBySlug(ctx, *tenantSlug)
+	if err != nil {
+		die("get tenant: %v", err)
+	}
+
+	rows, err := q.ListUnlinkedIdentities(ctx, tenant.ID)
+	if err != nil {
+		die("list unlinked: %v", err)
+	}
+
+	src := make([]identities.Identity, 0, len(rows))
+	for _, r := range rows {
+		var email string
+		if r.ExternalEmail != nil {
+			email = *r.ExternalEmail
+		}
+		src = append(src, identities.Identity{
+			ID:               r.ID,
+			Kind:             r.Kind,
+			ExternalUsername: r.ExternalUsername,
+			ExternalEmail:    email,
+		})
+	}
+
+	suggestions := identities.Match(src)
+	emitJSON(map[string]any{
+		"tenant":      tenant.Slug,
+		"unlinked":    len(src),
+		"suggestions": suggestions,
+	})
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // ---- compute now ----
 
 func computeNow(ctx context.Context, q *queries.Queries, cfg config.Config, args []string) {
@@ -461,5 +644,10 @@ Usage:
   cli compute now --project UUID --window 30
   cli thresholds get --tenant X
   cli thresholds set --tenant X [--file thresholds.json | - for stdin]
-  cli thresholds defaults`)
+  cli thresholds defaults
+  cli people backfill --tenant X
+  cli people list-unlinked --tenant X
+  cli people create --tenant X --name "Alice Doe" [--email alice@acme.com]
+  cli people link --identity UUID --person UUID
+  cli people automatch --tenant X`)
 }
