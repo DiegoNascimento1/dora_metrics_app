@@ -15,3 +15,4 @@ Documentos curtos que registram **decisões arquiteturais relevantes**, seu cont
 | ---- | ------------------------------------------------- | -------- | ---------- |
 | 0001 | [Stack — Go (backend) + Angular (frontend)](0001-stack-go-angular.md) | Accepted | 2026-05-19 |
 | 0002 | [Banco de dados — PostgreSQL puro](0002-database-postgresql.md)       | Accepted | 2026-05-19 |
+| 0003 | [Modelo de identidades unificadas (GitLab ↔ Jira)](0003-unified-identity-model.md) | Accepted | 2026-05-20 |
