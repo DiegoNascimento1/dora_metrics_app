@@ -99,12 +99,12 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 
 **Critério de saída:** dado um deploy GitLab disparado por `alice_dev` e um incident Jira aberto por `alice@acme.com`, o sistema atribui ambos à **mesma** pessoa Alice. Métricas DORA do time não dobram contagem.
 
-## Fase 4 — Alertas e múltiplos tenants — Pendente
+## Fase 4 — Alertas e múltiplos tenants — 🟡 Em andamento
 
 **Objetivo:** operacionalizar como ferramenta de uso diário.
 
-- [ ] Engine de alertas com regras configuráveis
-- [ ] Webhook out → Teams, email
+- [x] Engine de alertas com regras configuráveis — `platform.alert_rule` + `platform.alert_event` (migração `0010`), CRUD `/api/v1/alert-rules`, detecção plugada em `HandleComputeMetricWindow` (compara `previous_tier` vs `current_tier` da `metric_window` recém-gravada). Tipos: `tier_regression` (Elite→High etc) e `tier_change` (qualquer mudança). Frontend em `/alerts` com listagem + dialog de criação/edição + histórico de disparos.
+- [x] Webhook out HTTP genérico — task asynq `dispatch:alert` envia POST JSON Slack-compatible (`{text, alert:{...}}`); status de entrega rastreado em `alert_event.delivery_status` (`pending`/`delivered`/`failed`) + `http_status` + `last_error` para retry/auditoria. 4xx não-transitório vira `SkipRetry`; 5xx/timeout/429 retry com backoff (até 5x). Teams e email são apenas variantes de webhook genérico (próximo passo: templates por destino).
 - [ ] Suporte a múltiplas `source_instance` simultâneas (já está no schema; falta exercitar)
 - [ ] Suporte a múltiplos tenants reais (isolamento, billing-like — mesmo que internamente)
 - [x] Histórico mensal congelado (`metric_monthly_snapshot`) — task `snapshot:monthly` agendada `0 0 1 * *` (1º dia do mês 00:00 UTC) lê o último `metric_window` 30d de cada projeto ativo e congela em `metric_monthly_snapshot` com mês = mês anterior. Idempotente
