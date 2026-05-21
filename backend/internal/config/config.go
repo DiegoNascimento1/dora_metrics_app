@@ -34,6 +34,7 @@ type APIConfig struct {
 type WorkerConfig struct {
 	Concurrency int
 	RedisAddr   string
+	MetricsAddr string // endereço HTTP onde o /metrics do worker é exposto
 }
 
 // DatabaseConfig descreve a conexão Postgres.
@@ -103,6 +104,7 @@ func Load() (Config, error) {
 
 	v.SetDefault("WORKER_CONCURRENCY", 10)
 	v.SetDefault("WORKER_REDIS_ADDR", "localhost:6379")
+	v.SetDefault("WORKER_METRICS_ADDR", ":9090")
 
 	v.SetDefault("SECRET_PROVIDER", "env")
 	v.SetDefault("JIRA_MCP_URL", "https://mcp.atlassian.com/v1/mcp")
@@ -119,6 +121,7 @@ func Load() (Config, error) {
 		Worker: WorkerConfig{
 			Concurrency: v.GetInt("WORKER_CONCURRENCY"),
 			RedisAddr:   v.GetString("WORKER_REDIS_ADDR"),
+			MetricsAddr: v.GetString("WORKER_METRICS_ADDR"),
 		},
 		Database: DatabaseConfig{
 			Host:     v.GetString("POSTGRES_HOST"),

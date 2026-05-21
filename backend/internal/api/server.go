@@ -11,6 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/storage"
 )
 
@@ -24,6 +25,7 @@ type Server struct {
 
 // NewServer constrói o servidor com rotas registradas.
 func NewServer(cfg config.Config, db *storage.Pool, asynqClient *asynq.Client) *Server {
+	observability.Register()
 	s := &Server{cfg: cfg, db: db, asynq: asynqClient, mux: chi.NewRouter()}
 	s.routes()
 	return s
@@ -41,6 +43,7 @@ func (s *Server) routes() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(observability.HTTPMiddleware)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:4200"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -51,6 +54,7 @@ func (s *Server) routes() {
 
 	r.Get("/healthz", s.handleHealthz())
 	r.Get("/readyz", s.handleReadyz())
+	r.Handle("/metrics", observability.Handler())
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/projects", s.handleListProjects())

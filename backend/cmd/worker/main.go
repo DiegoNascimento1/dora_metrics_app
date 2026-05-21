@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/dora-metrics-app/backend/internal/collector"
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/secret"
 	"github.com/dora-metrics-app/backend/internal/storage"
 )
@@ -69,12 +72,28 @@ func main() {
 		},
 	)
 
+	observability.Register()
+
 	mux := asynq.NewServeMux()
+	mux.Use(observability.AsynqMiddleware)
 	handlers.Register(mux)
 
 	scheduler, err := buildScheduler(redisOpt)
 	if err != nil {
 		log.Fatal().Err(err).Msg("build scheduler")
+	}
+
+	// Servidor HTTP só pra expor /metrics no worker (Prometheus scrape).
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", observability.Handler())
+	metricsMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	metricsSrv := &http.Server{
+		Addr:              cfg.Worker.MetricsAddr,
+		Handler:           metricsMux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	go func() {
@@ -91,10 +110,23 @@ func main() {
 		}
 	}()
 
+	go func() {
+		log.Info().Str("addr", cfg.Worker.MetricsAddr).Msg("worker /metrics listening")
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error().Err(err).Msg("metrics server")
+		}
+	}()
+
 	<-rootCtx.Done()
 	log.Info().Msg("shutdown signal received")
 	scheduler.Shutdown()
 	srv.Shutdown()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		log.Warn().Err(err).Msg("metrics server shutdown")
+	}
 	log.Info().Msg("worker stopped")
 }
 
