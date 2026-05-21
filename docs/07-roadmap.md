@@ -161,6 +161,7 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 
 - [x] **Tier badges animados** — chip Elite tem animação `tier-breathe` 4s (scale 1.000→1.015, soft glow); respeita `prefers-reduced-motion`. Cada tier carrega ícone Material Symbol via `::before` (workspace_premium / trending_up / remove / trending_down / help) — atende SC 1.4.1 (cor não pode ser única forma de transmitir informação)
 - [x] **Streaks** — endpoint `/projects/{id}/achievements` retorna `daysSinceLastIncident`; card no dashboard com contador grande + ícone `local_fire_department`. Empty state (`-1`) orienta a configurar `jira_project_keys`
+- [x] **Team identity** — cada time tem nome, cor (hex CSS) e emoji. Tela `/teams` com cards coloridos + dialog de criação/edição (preview ao vivo, 8 cores Tailwind WCAG AA + 10 emojis sugeridos). Página `/projects` mostra chip do time. Migration 0009 + REST `/teams` CRUD + `/teams/{id}/projects` (assign) + `/projects/{id}/unassign-team`
 - [x] **Achievements** (primeira batch — pacote `internal/gamification`, 100% test coverage):
     - 🔥 *Week Streak* — 7+ dias sem incident
     - 🛡️ *Steady Hand* — 30+ dias sem incident
