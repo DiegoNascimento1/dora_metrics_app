@@ -23,7 +23,7 @@ import { ThemeService } from './core/theme/theme.service';
   template: `
     <mat-toolbar class="app-bar">
       <span class="brand">
-        <mat-icon class="brand-icon">trending_up</mat-icon>
+        <img src="logo.svg" alt="" class="brand-logo" width="28" height="28" />
         <span class="brand-text">DORA Metrics</span>
       </span>
       <span class="spacer"></span>
@@ -63,14 +63,16 @@ import { ThemeService } from './core/theme/theme.service';
       .brand {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-2);
+        gap: 10px;
       }
-      .brand-icon {
-        color: var(--color-brand);
+      .brand-logo {
+        display: block;
+        flex-shrink: 0;
       }
       .brand-text {
         font-weight: 700;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.015em;
+        font-size: 1.0625rem;
       }
       .spacer {
         flex: 1 1 auto;

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- 4 barras crescentes representando as 4 métricas DORA + tendência positiva -->
+  <rect x="3"  y="20" width="4" height="9"  rx="1" fill="#2563eb"/>
+  <rect x="10" y="15" width="4" height="14" rx="1" fill="#2563eb"/>
+  <rect x="17" y="9"  width="4" height="20" rx="1" fill="#2563eb"/>
+  <rect x="24" y="3"  width="4" height="26" rx="1" fill="#2563eb"/>
+  <!-- Indicador "elite" — pontinho verde no topo da barra mais alta -->
+  <circle cx="26" cy="6" r="2.5" fill="#16a34a" stroke="#ffffff" stroke-width="1"/>
+</svg>
