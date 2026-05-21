@@ -35,6 +35,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'leaderboard',
+    loadComponent: () =>
+      import('./features/leaderboard/leaderboard.component').then(
+        (m) => m.LeaderboardComponent,
+      ),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.component').then(
