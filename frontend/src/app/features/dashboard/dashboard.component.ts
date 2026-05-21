@@ -25,6 +25,7 @@ import {
   DoraMetrics,
   Project,
   ProjectAchievements,
+  Team,
   TimeseriesPoint,
 } from '../../core/api/api.types';
 import { TimeseriesChartComponent } from './timeseries-chart.component';
@@ -78,13 +79,36 @@ type Window = '7d' | '30d' | '90d';
     } @else {
       <div class="filters">
         <mat-form-field appearance="outline">
-          <mat-label>Projeto</mat-label>
-          <mat-select [(value)]="selectedProjectId" (selectionChange)="reload()">
-            @for (p of projects(); track p.id) {
-              <mat-option [value]="p.id">{{ p.pathWithNamespace }}</mat-option>
-            }
+          <mat-label>Escopo</mat-label>
+          <mat-select [(value)]="scope" (selectionChange)="onScopeChange()">
+            <mat-option value="project">Por projeto</mat-option>
+            <mat-option value="team" [disabled]="teams().length === 0">
+              Por time
+            </mat-option>
           </mat-select>
         </mat-form-field>
+
+        @if (scope === 'project') {
+          <mat-form-field appearance="outline">
+            <mat-label>Projeto</mat-label>
+            <mat-select [(value)]="selectedProjectId" (selectionChange)="reload()">
+              @for (p of projects(); track p.id) {
+                <mat-option [value]="p.id">{{ p.pathWithNamespace }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        } @else {
+          <mat-form-field appearance="outline">
+            <mat-label>Time</mat-label>
+            <mat-select [(value)]="selectedTeamId" (selectionChange)="reload()">
+              @for (t of teams(); track t.id) {
+                <mat-option [value]="t.id">
+                  {{ t.emoji || '👥' }} {{ t.name }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
 
         <mat-form-field appearance="outline">
           <mat-label>Janela</mat-label>
@@ -136,11 +160,15 @@ type Window = '7d' | '30d' | '90d';
           }
         </div>
 
-        <app-achievements-card [data]="achievements()" />
+        @if (scope === 'project') {
+          <app-achievements-card [data]="achievements()" />
+        }
 
         <mat-card appearance="outlined" class="chart-card">
           <mat-card-header>
-            <mat-card-title>Deploys de produção por dia</mat-card-title>
+            <mat-card-title>
+              {{ scope === 'team' ? 'Deploys do time por dia' : 'Deploys de produção por dia' }}
+            </mat-card-title>
           </mat-card-header>
           <mat-card-content>
             @if (points().length === 0) {
@@ -151,20 +179,22 @@ type Window = '7d' | '30d' | '90d';
           </mat-card-content>
         </mat-card>
 
-        <mat-card appearance="outlined" class="table-card">
-          <mat-card-header>
-            <mat-card-title>
-              Drill-down — {{ deployments().length }} deploys na janela
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            @if (deployments().length === 0) {
-              <p class="empty">Sem deploys.</p>
-            } @else {
-              <app-deployments-table [deployments]="deployments()" />
-            }
-          </mat-card-content>
-        </mat-card>
+        @if (scope === 'project') {
+          <mat-card appearance="outlined" class="table-card">
+            <mat-card-header>
+              <mat-card-title>
+                Drill-down — {{ deployments().length }} deploys na janela
+              </mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              @if (deployments().length === 0) {
+                <p class="empty">Sem deploys.</p>
+              } @else {
+                <app-deployments-table [deployments]="deployments()" />
+              }
+            </mat-card-content>
+          </mat-card>
+        }
 
         <p class="meta">
           Amostra: {{ metrics()?.sampleSize ?? 0 }} deploys ·
@@ -228,12 +258,15 @@ export class DashboardComponent {
   loading = signal(false);
   error = signal<string | null>(null);
   projects = signal<Project[]>([]);
+  teams = signal<Team[]>([]);
   metrics = signal<DoraMetrics | null>(null);
   points = signal<TimeseriesPoint[]>([]);
   deployments = signal<Deployment[]>([]);
   achievements = signal<ProjectAchievements | null>(null);
 
+  scope: 'project' | 'team' = 'project';
   selectedProjectId: string | null = null;
+  selectedTeamId: string | null = null;
   selectedWindow: Window = '30d';
 
   tiles = computed<MetricTile[]>(() => {
@@ -274,19 +307,27 @@ export class DashboardComponent {
 
   private loadProjects(): void {
     this.loading.set(true);
-    this.api
-      .listProjects()
-      .pipe(
+    forkJoin({
+      projects: this.api.listProjects().pipe(
         catchError((err) => {
           this.error.set(this.errorMessage(err));
           return of([] as Project[]);
         }),
+      ),
+      teams: this.api
+        .listTeams('acme')
+        .pipe(catchError(() => of([] as Team[]))),
+    })
+      .pipe(
         finalize(() => {
-          if (this.projects().length === 0) this.loading.set(false);
+          if (this.projects().length === 0 && this.teams().length === 0) {
+            this.loading.set(false);
+          }
         }),
       )
-      .subscribe((projects) => {
+      .subscribe(({ projects, teams }) => {
         this.projects.set(projects);
+        this.teams.set(teams);
         if (projects.length > 0) {
           this.selectedProjectId = projects[0].id;
           this.reload();
@@ -294,23 +335,41 @@ export class DashboardComponent {
       });
   }
 
-  reload(): void {
-    if (!this.selectedProjectId) return;
-    this.loading.set(true);
-    this.error.set(null);
+  onScopeChange(): void {
+    if (this.scope === 'team' && !this.selectedTeamId && this.teams().length > 0) {
+      this.selectedTeamId = this.teams()[0].id;
+    }
+    if (this.scope === 'project' && !this.selectedProjectId && this.projects().length > 0) {
+      this.selectedProjectId = this.projects()[0].id;
+    }
+    this.reload();
+  }
 
+  reload(): void {
+    this.error.set(null);
+    if (this.scope === 'team') {
+      if (!this.selectedTeamId) return;
+      this.reloadTeam(this.selectedTeamId);
+    } else {
+      if (!this.selectedProjectId) return;
+      this.reloadProject(this.selectedProjectId);
+    }
+  }
+
+  private reloadProject(projectId: string): void {
+    this.loading.set(true);
     forkJoin({
       metrics: this.api
-        .getProjectMetrics(this.selectedProjectId, this.selectedWindow)
+        .getProjectMetrics(projectId, this.selectedWindow)
         .pipe(catchError(() => of(null))),
       timeseries: this.api
-        .getProjectTimeseries(this.selectedProjectId, this.selectedWindow)
+        .getProjectTimeseries(projectId, this.selectedWindow)
         .pipe(catchError(() => of({ points: [] as TimeseriesPoint[] }))),
       deployments: this.api
-        .listProjectDeployments(this.selectedProjectId, this.selectedWindow)
+        .listProjectDeployments(projectId, this.selectedWindow)
         .pipe(catchError(() => of([] as Deployment[]))),
       achievements: this.api
-        .getProjectAchievements(this.selectedProjectId, this.selectedWindow)
+        .getProjectAchievements(projectId, this.selectedWindow)
         .pipe(catchError(() => of<ProjectAchievements | null>(null))),
     })
       .pipe(finalize(() => this.loading.set(false)))
@@ -319,6 +378,26 @@ export class DashboardComponent {
         this.points.set(timeseries.points ?? []);
         this.deployments.set(deployments);
         this.achievements.set(achievements);
+      });
+  }
+
+  private reloadTeam(teamId: string): void {
+    this.loading.set(true);
+    forkJoin({
+      metrics: this.api
+        .getTeamMetrics(teamId, this.selectedWindow)
+        .pipe(catchError(() => of(null))),
+      timeseries: this.api
+        .getTeamTimeseries(teamId, this.selectedWindow)
+        .pipe(catchError(() => of({ points: [] as TimeseriesPoint[] }))),
+    })
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe(({ metrics, timeseries }) => {
+        this.metrics.set(metrics);
+        this.points.set(timeseries.points ?? []);
+        // Achievements e drill-down ainda não suportam scope=team.
+        this.achievements.set(null);
+        this.deployments.set([]);
       });
   }
 

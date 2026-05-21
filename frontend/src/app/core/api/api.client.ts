@@ -172,6 +172,26 @@ export class ApiClient {
     );
   }
 
+  getTeamMetrics(
+    teamId: string,
+    window: '7d' | '30d' | '90d' = '30d',
+  ): Observable<DoraMetrics> {
+    return this.http.get<DoraMetrics>(
+      `${API_BASE}/teams/${teamId}/metrics`,
+      { params: { window } },
+    );
+  }
+
+  getTeamTimeseries(
+    teamId: string,
+    window: '7d' | '30d' | '90d' = '30d',
+  ): Observable<TimeseriesResponse> {
+    return this.http.get<TimeseriesResponse>(
+      `${API_BASE}/teams/${teamId}/timeseries`,
+      { params: { window } },
+    );
+  }
+
   healthz(): Observable<{ status: string }> {
     return this.http.get<{ status: string }>('/healthz');
   }
