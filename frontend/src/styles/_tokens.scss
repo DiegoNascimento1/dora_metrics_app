@@ -1,47 +1,48 @@
 // Design tokens — DORA Metrics App
-// Paleta corporativa sóbria (neutros + acentos vivos só em status).
-// Tipografia: Inter (sans) + JetBrains Mono (mono).
-// Ver docs/07-roadmap.md § Design UX/UI
+//
+// Paleta inspirada em dashboards corporativos modernos (Linear, Vercel, GitHub).
+// Slate como base + blue-600 como brand. Vibrant mas não cansativo.
 
 :root {
-  // ---- Neutros ----
-  --color-bg:            #f8fafc; // off-white
-  --color-bg-elevated:   #ffffff;
-  --color-surface:       #f1f5f9;
-  --color-border:        #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  // ---- Surfaces (light) ----
+  --color-bg:                #f8fafc;   // slate-50
+  --color-bg-elevated:       #ffffff;
+  --color-surface:           #ffffff;
+  --color-surface-subtle:    #f1f5f9;   // slate-100
+  --color-border:            #e2e8f0;   // slate-200
+  --color-border-strong:     #cbd5e1;   // slate-300
 
-  --color-text-primary:   #0f172a; // azul-escuro corporativo
-  --color-text-secondary: #475569;
-  --color-text-muted:     #94a3b8;
-  --color-text-inverse:   #ffffff;
+  --color-text-primary:      #0f172a;   // slate-900
+  --color-text-secondary:    #475569;   // slate-600
+  --color-text-muted:        #94a3b8;   // slate-400
+  --color-text-inverse:      #ffffff;
 
   // ---- Brand ----
-  --color-brand:        #1e3a8a; // navy corporativo
-  --color-brand-hover:  #1e40af;
-  --color-accent:       #0ea5e9; // cyan discreto p/ links/hover
+  --color-brand:             #2563eb;   // blue-600
+  --color-brand-hover:       #1d4ed8;   // blue-700
+  --color-brand-subtle:      #dbeafe;   // blue-100
+  --color-brand-fg:          #ffffff;
 
-  // ---- Status (Elite/High/Medium/Low) ----
-  // Pensados para WCAG AA contra texto branco + ícone associado por
-  // acessibilidade (cor sozinha não basta).
-  --color-tier-elite:    #15803d; // verde sóbrio
-  --color-tier-elite-bg: #dcfce7;
-  --color-tier-high:     #1d4ed8; // azul confiança
-  --color-tier-high-bg:  #dbeafe;
-  --color-tier-medium:   #b45309; // âmbar
-  --color-tier-medium-bg:#fef3c7;
-  --color-tier-low:      #b91c1c; // vermelho refinado (não néon)
-  --color-tier-low-bg:   #fee2e2;
-  --color-tier-na:       #64748b;
-  --color-tier-na-bg:    #e2e8f0;
+  // ---- Status DORA — soft chips ----
+  --color-tier-elite:        #15803d;   // green-700
+  --color-tier-elite-bg:     #dcfce7;   // green-100
+  --color-tier-high:         #1d4ed8;   // blue-700
+  --color-tier-high-bg:      #dbeafe;   // blue-100
+  --color-tier-medium:       #b45309;   // amber-700
+  --color-tier-medium-bg:    #fef3c7;   // amber-100
+  --color-tier-low:          #b91c1c;   // red-700
+  --color-tier-low-bg:       #fee2e2;   // red-100
+  --color-tier-na:           #475569;   // slate-600
+  --color-tier-na-bg:        #f1f5f9;   // slate-100
 
-  // ---- Source badges ----
-  --color-gitlab: #fc6d26; // brand oficial
-  --color-jira:   #0052cc; // brand oficial
+  // ---- Source brand chips ----
+  --color-gitlab:            #fc6d26;
+  --color-jira:              #2563eb;
+  --color-streak:            #ea580c;   // orange-600
 
   // ---- Tipografia ----
   --font-sans: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', monospace;
 
   --font-size-xs:   0.75rem;
   --font-size-sm:   0.875rem;
@@ -60,43 +61,57 @@
   --space-6: 32px;
   --space-8: 48px;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
 
-  // ---- Elevação ----
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 8px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 12px 24px -8px rgba(15, 23, 42, 0.15);
+  // ---- Sombras (suaves) ----
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / 0.06), 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -1px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 12px 24px -8px rgb(15 23 42 / 0.15);
 
   // ---- Transições ----
   --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  color-scheme: light;
 }
 
-// ---- Dark theme (opt-in via [data-theme="dark"] no <html>) ----
+// ---- Dark theme ----
 [data-theme="dark"] {
-  --color-bg:            #0f172a;
-  --color-bg-elevated:   #1e293b;
-  --color-surface:       #334155;
-  --color-border:        #334155;
-  --color-border-strong: #475569;
+  --color-bg:                #020617;   // slate-950
+  --color-bg-elevated:       #0f172a;   // slate-900
+  --color-surface:           #0f172a;
+  --color-surface-subtle:    #1e293b;   // slate-800
+  --color-border:            #1e293b;
+  --color-border-strong:     #334155;   // slate-700
 
-  --color-text-primary:   #f1f5f9;
-  --color-text-secondary: #cbd5e1;
-  --color-text-muted:     #64748b;
+  --color-text-primary:      #f1f5f9;   // slate-100
+  --color-text-secondary:    #cbd5e1;   // slate-300
+  --color-text-muted:        #64748b;   // slate-500
 
-  --color-brand:        #60a5fa;
-  --color-brand-hover:  #93c5fd;
-  --color-accent:       #38bdf8;
+  --color-brand:             #60a5fa;   // blue-400
+  --color-brand-hover:       #93c5fd;   // blue-300
+  --color-brand-subtle:      #1e3a8a;   // blue-900
+  --color-brand-fg:          #0f172a;
 
-  --color-tier-elite-bg: #064e3b;
-  --color-tier-high-bg:  #1e3a8a;
-  --color-tier-medium-bg:#78350f;
-  --color-tier-low-bg:   #7f1d1d;
-  --color-tier-na-bg:    #334155;
+  --color-tier-elite:        #4ade80;   // green-400
+  --color-tier-elite-bg:     #052e16;   // green-950
+  --color-tier-high:         #60a5fa;
+  --color-tier-high-bg:      #172554;   // blue-950
+  --color-tier-medium:       #fbbf24;   // amber-400
+  --color-tier-medium-bg:    #451a03;   // amber-950
+  --color-tier-low:          #f87171;   // red-400
+  --color-tier-low-bg:       #450a0a;   // red-950
+  --color-tier-na:           #94a3b8;
+  --color-tier-na-bg:        #1e293b;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.4), 0 2px 4px -1px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 12px 24px -8px rgb(0 0 0 / 0.5);
+
+  color-scheme: dark;
 }

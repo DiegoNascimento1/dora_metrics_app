@@ -9,8 +9,9 @@ html, body {
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-text-primary);
-  font-feature-settings: 'cv11', 'ss01'; /* Inter: numerais alt + alt-a */
-  /* Transição suave ao alternar tema (cores apenas; layout não anima). */
+  font-feature-settings: 'cv11' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color var(--transition-base), color var(--transition-base);
 }
 
@@ -20,15 +21,16 @@ html, body {
 
 code, pre {
   font-family: var(--font-mono);
+  font-size: 0.9em;
 }
 
 a {
   color: var(--color-brand);
   text-decoration: none;
-  transition: color var(--transition-fast);
+  transition: opacity var(--transition-fast);
 }
 a:hover {
-  color: var(--color-brand-hover);
+  opacity: 0.85;
   text-decoration: underline;
 }
 
@@ -40,16 +42,17 @@ a:hover {
 
 h1 {
   font-size: var(--font-size-2xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 0 var(--space-4);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0 0 var(--space-5);
   color: var(--color-text-primary);
 }
 
 h2 {
   font-size: var(--font-size-xl);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  color: var(--color-text-primary);
 }
 
 .muted {
@@ -57,89 +60,115 @@ h2 {
   font-size: var(--font-size-sm);
 }
 
-/* Foco visível em todo interativo (WCAG 2.2 SC 2.4.7 + SC 2.4.11).
-   Sobrescreve o outline default do browser por um ring brand consistente. */
+/* Foco visível (WCAG 2.2 SC 2.4.7). */
 *:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
-  transition: outline-offset var(--transition-fast);
 }
-
-button:focus-visible,
-a:focus-visible {
-  outline-offset: 3px;
-}
-
-/* Remove o outline nos clicks de mouse — só queremos no keyboard nav. */
 *:focus:not(:focus-visible) {
   outline: none;
 }
 
-/* Cards Material com elevação consistente */
+/* ---- Material overrides leves para integrar com nossos tokens ---- */
 mat-card {
-  box-shadow: var(--shadow-sm) !important;
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid var(--color-border) !important;
   background: var(--color-bg-elevated) !important;
   color: var(--color-text-primary) !important;
-  transition: background-color var(--transition-base), border-color var(--transition-base);
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: background-color var(--transition-base),
+              border-color var(--transition-base),
+              box-shadow var(--transition-base);
 }
 
 mat-card-title {
+  color: var(--color-text-primary) !important;
   font-weight: 600 !important;
   letter-spacing: -0.01em;
-  color: var(--color-text-primary) !important;
 }
 
 mat-card-subtitle {
   color: var(--color-text-secondary) !important;
 }
 
-/* Tabelas Material no dark precisam de override (a default usa rgba branco). */
+/* Tabelas Material — força contraste no dark */
 .mat-mdc-table {
-  background: var(--color-bg-elevated) !important;
-}
-.mat-mdc-header-cell,
-.mat-mdc-cell {
-  color: var(--color-text-primary) !important;
-  border-bottom-color: var(--color-border) !important;
+  background: transparent !important;
 }
 .mat-mdc-header-cell {
   color: var(--color-text-secondary) !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  background: var(--color-surface-subtle) !important;
+}
+.mat-mdc-cell {
+  color: var(--color-text-primary) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+.mat-mdc-row:hover .mat-mdc-cell {
+  background: var(--color-surface-subtle);
 }
 
-/* Form fields no dark — Material usa material 3 design tokens próprios,
-   mas o label/outline ficam invisíveis com background escuro. */
+/* Form fields no dark */
 [data-theme="dark"] .mat-mdc-form-field {
   --mdc-outlined-text-field-label-text-color: var(--color-text-secondary);
   --mdc-outlined-text-field-input-text-color: var(--color-text-primary);
   --mdc-outlined-text-field-outline-color: var(--color-border-strong);
   --mdc-outlined-text-field-hover-outline-color: var(--color-brand);
+  --mdc-outlined-text-field-focus-outline-color: var(--color-brand);
 }
-
-[data-theme="dark"] .mat-mdc-select-value {
-  color: var(--color-text-primary);
-}
+[data-theme="dark"] .mat-mdc-select-value,
 [data-theme="dark"] .mat-mdc-option .mdc-list-item__primary-text {
-  color: var(--color-text-primary);
+  color: var(--color-text-primary) !important;
 }
 [data-theme="dark"] .mat-mdc-select-panel,
-[data-theme="dark"] .mat-mdc-autocomplete-panel {
+[data-theme="dark"] .mat-mdc-autocomplete-panel,
+[data-theme="dark"] .mat-mdc-menu-panel,
+[data-theme="dark"] .mat-mdc-dialog-container {
   background: var(--color-bg-elevated) !important;
 }
 
-/* Drag-and-drop visual feedback (CDK) */
+/* Botões Material — paleta brand consistente */
+.mat-mdc-raised-button.mat-primary,
+.mat-mdc-unelevated-button.mat-primary,
+.mat-mdc-flat-button.mat-primary {
+  --mdc-filled-button-container-color: var(--color-brand);
+  --mdc-filled-button-label-text-color: var(--color-brand-fg);
+}
+.mat-mdc-outlined-button.mat-primary,
+.mat-mdc-button.mat-primary {
+  --mdc-outlined-button-label-text-color: var(--color-brand);
+  --mdc-text-button-label-text-color: var(--color-brand);
+}
+
+/* Toolbar — fundo claro com borda inferior em vez do azul Material */
+.mat-toolbar.app-bar {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Drag-and-drop CDK */
 .cdk-drag-preview {
   box-shadow: var(--shadow-lg);
   opacity: 0.95;
-  transform: rotate(-1deg);
 }
-
 .cdk-drag-placeholder {
   opacity: 0.3;
 }
-
 .cdk-drag-animating {
   transition: transform var(--transition-base);
+}
+
+/* Snackbar — visível no dark */
+[data-theme="dark"] .mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-color: var(--color-bg-elevated);
+  --mdc-snackbar-supporting-text-color: var(--color-text-primary);
+}
+
+/* Spinner — usa cor brand */
+.mat-mdc-progress-spinner {
+  --mdc-circular-progress-active-indicator-color: var(--color-brand);
 }

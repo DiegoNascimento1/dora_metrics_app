@@ -1,38 +1,11 @@
-// Tier badges DORA — pequenos chips com micro-interação "respirando".
-// Anti-padrão evitado: não piscam, não tocam som, não viram glitter.
-//
-// Cor sozinha não basta (WCAG SC 1.4.1): cada tier carrega um ícone
-// Material Symbol via ::before (Unicode codepoint da família "outlined").
-//   elite              workspace_premium  e7af
-//   high               trending_up        e8e5
-//   medium             remove             e15b
-//   low                trending_down      e8e3
-//   insufficient_data  help               e887
+// Tier badges DORA — chips com cor + ícone (WCAG SC 1.4.1).
+// Estilo "soft": background pálido + texto na cor do tier, em vez de
+// solido vibrante. Lê melhor em dashboards densos sem competir
+// visualmente com Call-to-actions.
 
 @keyframes tier-breathe {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 currentColor;
-  }
-  50% {
-    transform: scale(1.015);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
-  }
-}
-
-@mixin tier-base {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  text-transform: capitalize;
-  letter-spacing: 0.02em;
-  color: var(--color-text-inverse);
-  transition: transform var(--transition-base);
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
 }
 
 .tier-elite,
@@ -41,12 +14,21 @@
 .tier-low,
 .tier-insufficient_data,
 .tier-na {
-  @include tier-base;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  transition: transform var(--transition-base);
 }
 
-// Ícone (Material Symbols Outlined) renderizado via ::before usando o
-// codepoint Unicode. Mais leve que injetar <mat-icon> em todo template
-// que usa o chip e garante acessibilidade pra quem não distingue cor.
+// Ícone via ::before usando ligature do Material Symbols Outlined.
 .tier-elite::before,
 .tier-high::before,
 .tier-medium::before,
@@ -55,55 +37,63 @@
 .tier-na::before {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
-  font-size: 1em;
+  font-style: normal;
+  font-size: 18px;
   line-height: 1;
-  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
-  speak: none;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga' 1;
+  -webkit-font-feature-settings: 'liga' 1;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+
+// ---- cores soft ----
 
 .tier-elite {
-  background: var(--color-tier-elite);
-  animation: tier-breathe 4s ease-in-out infinite;
+  background: var(--color-tier-elite-bg);
+  color: var(--color-tier-elite);
+  border-color: color-mix(in srgb, var(--color-tier-elite) 30%, transparent);
+  animation: tier-breathe 3.5s ease-in-out infinite;
 }
-.tier-elite::before {
-  content: 'workspace_premium';
-}
+.tier-elite::before { content: 'workspace_premium'; }
 
 .tier-high {
-  background: var(--color-tier-high);
+  background: var(--color-tier-high-bg);
+  color: var(--color-tier-high);
+  border-color: color-mix(in srgb, var(--color-tier-high) 30%, transparent);
 }
-.tier-high::before {
-  content: 'trending_up';
-}
+.tier-high::before { content: 'trending_up'; }
 
 .tier-medium {
-  background: var(--color-tier-medium);
-  color: #1f2937; // contraste contra o âmbar
+  background: var(--color-tier-medium-bg);
+  color: var(--color-tier-medium);
+  border-color: color-mix(in srgb, var(--color-tier-medium) 30%, transparent);
 }
-.tier-medium::before {
-  content: 'remove';
-}
+.tier-medium::before { content: 'remove'; }
 
 .tier-low {
-  background: var(--color-tier-low);
+  background: var(--color-tier-low-bg);
+  color: var(--color-tier-low);
+  border-color: color-mix(in srgb, var(--color-tier-low) 30%, transparent);
 }
-.tier-low::before {
-  content: 'trending_down';
-}
+.tier-low::before { content: 'trending_down'; }
 
 .tier-insufficient_data,
 .tier-na {
-  background: var(--color-tier-na);
+  background: var(--color-tier-na-bg);
+  color: var(--color-tier-na);
+  border-color: color-mix(in srgb, var(--color-tier-na) 30%, transparent);
 }
 .tier-insufficient_data::before,
-.tier-na::before {
-  content: 'help';
-}
+.tier-na::before { content: 'help_outline'; }
 
-// Respeita prefers-reduced-motion — acessibilidade não-negociável.
+// Respeita prefers-reduced-motion
 @media (prefers-reduced-motion: reduce) {
-  .tier-elite {
-    animation: none;
-  }
+  .tier-elite { animation: none; }
 }
