@@ -181,6 +181,10 @@ type PlatformSourceInstance struct {
 	DisplayName string    `json:"display_name"`
 	AuthRef     string    `json:"auth_ref"`
 	CreatedAt   time.Time `json:"created_at"`
+	// Token plaintext gravado via UI. Sensível — não logar nem expor em respostas REST.
+	SecretValue *string `json:"secret_value"`
+	// Email associado ao token (necessário para Jira Basic auth). NULL para GitLab.
+	AuthEmail *string `json:"auth_email"`
 }
 
 type PlatformTeam struct {

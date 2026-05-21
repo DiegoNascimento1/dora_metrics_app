@@ -13,7 +13,10 @@ import (
 
 const daysSinceLastIncidentForProject = `-- name: DaysSinceLastIncidentForProject :one
 SELECT
-  FLOOR(EXTRACT(EPOCH FROM (now() - MAX(i.created_at))) / 86400)::int AS days_since
+  COALESCE(
+    FLOOR(EXTRACT(EPOCH FROM (now() - MAX(i.created_at))) / 86400)::int,
+    -1
+  ) AS days_since
 FROM platform.incident i
 JOIN platform.project p
   ON p.tenant_id = i.tenant_id
@@ -22,11 +25,12 @@ WHERE p.id = $1
 `
 
 // Dias completos desde o último incident production-impactante do projeto
-// (via mapping jira_project_keys). NULL se o projeto nunca teve incident
-// ou se não tem jira_project_keys configurado.
-func (q *Queries) DaysSinceLastIncidentForProject(ctx context.Context, projectID uuid.UUID) (int32, error) {
+// (via mapping jira_project_keys). Retorna -1 quando o projeto nunca teve
+// incident registrado (ou não tem jira_project_keys configurado).
+// O caller trata -1 como "sem incidents — streak infinito ainda não é mérito".
+func (q *Queries) DaysSinceLastIncidentForProject(ctx context.Context, projectID uuid.UUID) (interface{}, error) {
 	row := q.db.QueryRow(ctx, daysSinceLastIncidentForProject, projectID)
-	var days_since int32
+	var days_since interface{}
 	err := row.Scan(&days_since)
 	return days_since, err
 }

@@ -44,12 +44,13 @@ func (s *Server) handleProjectAchievements() http.HandlerFunc {
 			return
 		}
 
-		days, err := q.DaysSinceLastIncidentForProject(r.Context(), project.ID)
+		daysRaw, err := q.DaysSinceLastIncidentForProject(r.Context(), project.ID)
 		if err != nil {
 			log.Error().Err(err).Msg("days since last incident")
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		days := int(coerceInt(daysRaw))
 
 		mwRow, err := q.GetLatestMetricWindow(r.Context(), queries.GetLatestMetricWindowParams{
 			TenantID:   project.TenantID,
@@ -70,7 +71,7 @@ func (s *Server) handleProjectAchievements() http.HandlerFunc {
 
 		ach := gamification.EvaluateAchievements(
 			gamification.ProjectStats{
-				DaysSinceLastIncident: int(days),
+				DaysSinceLastIncident: days,
 				CurrentClassification: classification,
 				SampleSize:            sample,
 			},
@@ -80,9 +81,24 @@ func (s *Server) handleProjectAchievements() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, achievementsDTO{
 			ProjectID:             projectID.String(),
 			WindowDays:            windowDays,
-			DaysSinceLastIncident: int(days),
+			DaysSinceLastIncident: days,
 			CurrentClassification: classification,
 			Achievements:          ach,
 		})
 	}
+}
+
+// coerceInt unwraps the interface{} sqlc returns when COALESCE confuses type inference.
+func coerceInt(v interface{}) int64 {
+	switch x := v.(type) {
+	case int64:
+		return x
+	case int32:
+		return int64(x)
+	case int:
+		return int64(x)
+	case float64:
+		return int64(x)
+	}
+	return -1
 }

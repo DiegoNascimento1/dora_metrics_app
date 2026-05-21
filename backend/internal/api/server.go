@@ -65,6 +65,11 @@ func (s *Server) routes() {
 		r.Get("/identities/unlinked", s.handleListUnlinkedIdentities())
 		r.Get("/identities/automatch", s.handleAutomatch())
 		r.Post("/identities/{identityId}/link", s.handleLinkIdentity())
+
+		r.Get("/source-instances", s.handleListSourceInstances())
+		r.Post("/source-instances", s.handleCreateSourceInstance())
+		r.Delete("/source-instances/{sourceInstanceId}", s.handleDeleteSourceInstance())
+		r.Post("/source-instances/test", s.handleTestConnection())
 	})
 
 	r.Route("/webhooks", func(r chi.Router) {

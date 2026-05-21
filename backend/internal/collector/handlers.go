@@ -157,9 +157,9 @@ func (h *Handlers) HandleCollectGitlab(ctx context.Context, task *asynq.Task) er
 		return nil
 	}
 
-	token, err := h.Secret.Get(ctx, instance.AuthRef)
+	token, err := resolveToken(ctx, h.Secret, instance)
 	if err != nil {
-		return fmt.Errorf("resolve token (auth_ref=%s): %w", instance.AuthRef, err)
+		return fmt.Errorf("resolve gitlab token: %w", err)
 	}
 
 	client := gitlab.NewClient(instance.BaseUrl, token)
@@ -548,17 +548,14 @@ func (h *Handlers) HandleCollectJira(ctx context.Context, task *asynq.Task) erro
 		return fmt.Errorf("load jira source: %w", err)
 	}
 
-	// Auth via secret provider — auth_ref aponta para JIRA_API_TOKEN.
-	apiToken, err := h.Secret.Get(ctx, jiraInstance.AuthRef)
+	apiToken, err := resolveToken(ctx, h.Secret, jiraInstance)
 	if err != nil {
-		return fmt.Errorf("resolve jira token (auth_ref=%s): %w",
-			jiraInstance.AuthRef, err)
+		return fmt.Errorf("resolve jira token: %w", err)
 	}
 
-	// JIRA_EMAIL é env separada; secret provider expõe.
-	email, err := h.Secret.Get(ctx, "JIRA_EMAIL")
+	email, err := resolveJiraEmail(ctx, h.Secret, jiraInstance)
 	if err != nil {
-		return fmt.Errorf("resolve JIRA_EMAIL: %w", err)
+		return fmt.Errorf("resolve jira email: %w", err)
 	}
 
 	source := jira.NewRESTSource(jiraInstance.BaseUrl, email, apiToken)
@@ -756,6 +753,34 @@ func toInt32Ptr(p *int) *int32 {
 	}
 	v := int32(*p)
 	return &v
+}
+
+// resolveToken devolve a credencial efetiva para uma source_instance.
+//
+// Precedência:
+//   1. instance.SecretValue (token gravado via UI / REST)
+//   2. secret.Provider.Get(instance.AuthRef) (env var / vault — legado)
+//
+// Permite migrar gradualmente do env-driven para o DB-driven sem quebrar
+// instalações que já dependem do .env.
+func resolveToken(ctx context.Context, provider secret.Provider, instance queries.PlatformSourceInstance) (string, error) {
+	if instance.SecretValue != nil && *instance.SecretValue != "" {
+		return *instance.SecretValue, nil
+	}
+	if instance.AuthRef == "" {
+		return "", fmt.Errorf("source instance %s has neither secret_value nor auth_ref", instance.ID)
+	}
+	return provider.Get(ctx, instance.AuthRef)
+}
+
+// resolveJiraEmail extrai o email de auth do Jira:
+//   1. instance.AuthEmail (configurado via UI)
+//   2. secret.Provider.Get("JIRA_EMAIL") (legado)
+func resolveJiraEmail(ctx context.Context, provider secret.Provider, instance queries.PlatformSourceInstance) (string, error) {
+	if instance.AuthEmail != nil && *instance.AuthEmail != "" {
+		return *instance.AuthEmail, nil
+	}
+	return provider.Get(ctx, "JIRA_EMAIL")
 }
 
 // ---- helpers ----

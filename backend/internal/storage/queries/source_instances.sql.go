@@ -12,9 +12,11 @@ import (
 )
 
 const createSourceInstance = `-- name: CreateSourceInstance :one
-INSERT INTO platform.source_instance (tenant_id, kind, base_url, display_name, auth_ref)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, tenant_id, kind, base_url, display_name, auth_ref, created_at
+INSERT INTO platform.source_instance (
+  tenant_id, kind, base_url, display_name, auth_ref, secret_value, auth_email
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, tenant_id, kind, base_url, display_name, auth_ref, created_at, secret_value, auth_email
 `
 
 type CreateSourceInstanceParams struct {
@@ -23,6 +25,8 @@ type CreateSourceInstanceParams struct {
 	BaseUrl     string    `json:"base_url"`
 	DisplayName string    `json:"display_name"`
 	AuthRef     string    `json:"auth_ref"`
+	SecretValue *string   `json:"secret_value"`
+	AuthEmail   *string   `json:"auth_email"`
 }
 
 func (q *Queries) CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error) {
@@ -32,6 +36,8 @@ func (q *Queries) CreateSourceInstance(ctx context.Context, arg CreateSourceInst
 		arg.BaseUrl,
 		arg.DisplayName,
 		arg.AuthRef,
+		arg.SecretValue,
+		arg.AuthEmail,
 	)
 	var i PlatformSourceInstance
 	err := row.Scan(
@@ -42,12 +48,23 @@ func (q *Queries) CreateSourceInstance(ctx context.Context, arg CreateSourceInst
 		&i.DisplayName,
 		&i.AuthRef,
 		&i.CreatedAt,
+		&i.SecretValue,
+		&i.AuthEmail,
 	)
 	return i, err
 }
 
+const deleteSourceInstance = `-- name: DeleteSourceInstance :exec
+DELETE FROM platform.source_instance WHERE id = $1
+`
+
+func (q *Queries) DeleteSourceInstance(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSourceInstance, id)
+	return err
+}
+
 const getFirstSourceInstanceForTenantKind = `-- name: GetFirstSourceInstanceForTenantKind :one
-SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at FROM platform.source_instance
+SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at, secret_value, auth_email FROM platform.source_instance
 WHERE tenant_id = $1
   AND kind = $2
 ORDER BY created_at
@@ -70,12 +87,14 @@ func (q *Queries) GetFirstSourceInstanceForTenantKind(ctx context.Context, arg G
 		&i.DisplayName,
 		&i.AuthRef,
 		&i.CreatedAt,
+		&i.SecretValue,
+		&i.AuthEmail,
 	)
 	return i, err
 }
 
 const getSourceInstance = `-- name: GetSourceInstance :one
-SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at FROM platform.source_instance WHERE id = $1
+SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at, secret_value, auth_email FROM platform.source_instance WHERE id = $1
 `
 
 func (q *Queries) GetSourceInstance(ctx context.Context, id uuid.UUID) (PlatformSourceInstance, error) {
@@ -89,12 +108,14 @@ func (q *Queries) GetSourceInstance(ctx context.Context, id uuid.UUID) (Platform
 		&i.DisplayName,
 		&i.AuthRef,
 		&i.CreatedAt,
+		&i.SecretValue,
+		&i.AuthEmail,
 	)
 	return i, err
 }
 
 const listSourceInstancesByTenant = `-- name: ListSourceInstancesByTenant :many
-SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at FROM platform.source_instance
+SELECT id, tenant_id, kind, base_url, display_name, auth_ref, created_at, secret_value, auth_email FROM platform.source_instance
 WHERE tenant_id = $1
 ORDER BY created_at
 `
@@ -116,6 +137,8 @@ func (q *Queries) ListSourceInstancesByTenant(ctx context.Context, tenantID uuid
 			&i.DisplayName,
 			&i.AuthRef,
 			&i.CreatedAt,
+			&i.SecretValue,
+			&i.AuthEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -125,4 +148,42 @@ func (q *Queries) ListSourceInstancesByTenant(ctx context.Context, tenantID uuid
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateSourceInstanceSecret = `-- name: UpdateSourceInstanceSecret :one
+UPDATE platform.source_instance
+SET secret_value = $1,
+    auth_email   = $2,
+    auth_ref     = COALESCE($3, auth_ref)
+WHERE id = $4
+RETURNING id, tenant_id, kind, base_url, display_name, auth_ref, created_at, secret_value, auth_email
+`
+
+type UpdateSourceInstanceSecretParams struct {
+	SecretValue *string   `json:"secret_value"`
+	AuthEmail   *string   `json:"auth_email"`
+	AuthRef     *string   `json:"auth_ref"`
+	ID          uuid.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateSourceInstanceSecret(ctx context.Context, arg UpdateSourceInstanceSecretParams) (PlatformSourceInstance, error) {
+	row := q.db.QueryRow(ctx, updateSourceInstanceSecret,
+		arg.SecretValue,
+		arg.AuthEmail,
+		arg.AuthRef,
+		arg.ID,
+	)
+	var i PlatformSourceInstance
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Kind,
+		&i.BaseUrl,
+		&i.DisplayName,
+		&i.AuthRef,
+		&i.CreatedAt,
+		&i.SecretValue,
+		&i.AuthEmail,
+	)
+	return i, err
 }
