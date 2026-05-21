@@ -209,11 +209,11 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 - [ ] Testes E2E do API server (httptest + sqlc mock ou DB)
 - [ ] Karma/Jasmine specs do frontend (CI roda, mas só há specs default geradas pelo Angular)
 
-### Observabilidade — Pendente
+### Observabilidade — 🟡 Base entregue
 
-- [ ] Prometheus middleware no chi (request duration histogram + counter por route)
-- [ ] Endpoint `/metrics` exposto
-- [ ] Métricas custom de asynq (tasks processadas, latência, retries)
+- [x] Prometheus middleware no chi — `observability.HTTPMiddleware`, label por RoutePattern (não cardinalidade explosiva com path params), histogram de duração + counter por route+method+status
+- [x] Endpoint `/metrics` exposto na API (`:8080/metrics`) e no worker (`:9090/metrics`, servidor HTTP dedicado)
+- [x] Métricas asynq — `observability.AsynqMiddleware` envolve o ServeMux. `dora_asynq_tasks_total{type,status}` classifica success / error / skip_retry; `dora_asynq_task_duration_seconds{type}` histogram com buckets 50ms-5min (cobre coletas que batem em APIs remotas)
 - [ ] Tracing OpenTelemetry (opcional)
 - [ ] Dashboard Grafana exemplo (opcional)
 
