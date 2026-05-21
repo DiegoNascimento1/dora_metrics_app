@@ -1,8 +1,13 @@
 // Tier badges DORA — pequenos chips com micro-interação "respirando".
 // Anti-padrão evitado: não piscam, não tocam som, não viram glitter.
 //
-// Cor sozinha não basta (WCAG): pareada com ícone Material Symbol
-// específico de cada tier no template.
+// Cor sozinha não basta (WCAG SC 1.4.1): cada tier carrega um ícone
+// Material Symbol via ::before (Unicode codepoint da família "outlined").
+//   elite              workspace_premium  e7af
+//   high               trending_up        e8e5
+//   medium             remove             e15b
+//   low                trending_down      e8e3
+//   insufficient_data  help               e887
 
 @keyframes tier-breathe {
   0%, 100% {
@@ -39,23 +44,61 @@
   @include tier-base;
 }
 
+// Ícone (Material Symbols Outlined) renderizado via ::before usando o
+// codepoint Unicode. Mais leve que injetar <mat-icon> em todo template
+// que usa o chip e garante acessibilidade pra quem não distingue cor.
+.tier-elite::before,
+.tier-high::before,
+.tier-medium::before,
+.tier-low::before,
+.tier-insufficient_data::before,
+.tier-na::before {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-size: 1em;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+  speak: none;
+  -webkit-font-smoothing: antialiased;
+}
+
 .tier-elite {
   background: var(--color-tier-elite);
   animation: tier-breathe 4s ease-in-out infinite;
 }
+.tier-elite::before {
+  content: 'workspace_premium';
+}
+
 .tier-high {
   background: var(--color-tier-high);
 }
+.tier-high::before {
+  content: 'trending_up';
+}
+
 .tier-medium {
   background: var(--color-tier-medium);
   color: #1f2937; // contraste contra o âmbar
 }
+.tier-medium::before {
+  content: 'remove';
+}
+
 .tier-low {
   background: var(--color-tier-low);
 }
+.tier-low::before {
+  content: 'trending_down';
+}
+
 .tier-insufficient_data,
 .tier-na {
   background: var(--color-tier-na);
+}
+.tier-insufficient_data::before,
+.tier-na::before {
+  content: 'help';
 }
 
 // Respeita prefers-reduced-motion — acessibilidade não-negociável.

@@ -57,6 +57,25 @@ h2 {
   font-size: var(--font-size-sm);
 }
 
+/* Foco visível em todo interativo (WCAG 2.2 SC 2.4.7 + SC 2.4.11).
+   Sobrescreve o outline default do browser por um ring brand consistente. */
+*:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+  transition: outline-offset var(--transition-fast);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline-offset: 3px;
+}
+
+/* Remove o outline nos clicks de mouse — só queremos no keyboard nav. */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Cards Material com elevação consistente */
 mat-card {
   box-shadow: var(--shadow-sm) !important;
@@ -123,10 +142,4 @@ mat-card-subtitle {
 
 .cdk-drag-animating {
   transition: transform var(--transition-base);
-}
-
-.drop-zone-active {
-  background: var(--color-tier-high-bg) !important;
-  border-color: var(--color-tier-high) !important;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
