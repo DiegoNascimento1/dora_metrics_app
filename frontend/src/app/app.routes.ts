@@ -28,6 +28,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'teams',
+    loadComponent: () =>
+      import('./features/teams/teams.component').then(
+        (m) => m.TeamsComponent,
+      ),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.component').then(

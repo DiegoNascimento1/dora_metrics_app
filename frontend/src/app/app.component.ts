@@ -29,6 +29,7 @@ import { ThemeService } from './core/theme/theme.service';
       <span class="spacer"></span>
       <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
       <a mat-button routerLink="/projects" routerLinkActive="active">Projetos</a>
+      <a mat-button routerLink="/teams" routerLinkActive="active">Times</a>
       <a mat-button routerLink="/people" routerLinkActive="active">Pessoas</a>
       <a mat-button routerLink="/settings" routerLinkActive="active">
         <mat-icon class="nav-icon">settings</mat-icon>

@@ -1,13 +1,19 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { catchError, of, finalize } from 'rxjs';
+import { catchError, finalize, forkJoin, of } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api.client';
-import { Project } from '../../core/api/api.types';
+import { Project, Team } from '../../core/api/api.types';
 import { SkeletonComponent } from '../../shared/skeleton.component';
 import { EmptyStateComponent } from '../../shared/empty-state.component';
 
@@ -58,6 +64,20 @@ import { EmptyStateComponent } from '../../shared/empty-state.component';
           <ng-container matColumnDef="path">
             <th mat-header-cell *matHeaderCellDef>Path</th>
             <td mat-cell *matCellDef="let p">{{ p.pathWithNamespace }}</td>
+          </ng-container>
+          <ng-container matColumnDef="team">
+            <th mat-header-cell *matHeaderCellDef>Time</th>
+            <td mat-cell *matCellDef="let p">
+              @let team = teamFor(p.teamId);
+              @if (team) {
+                <span class="team-chip" [style.background]="team.color || '#475569'">
+                  <span class="team-chip-emoji">{{ team.emoji || '👥' }}</span>
+                  {{ team.name }}
+                </span>
+              } @else {
+                <span class="muted">—</span>
+              }
+            </td>
           </ng-container>
           <ng-container matColumnDef="id">
             <th mat-header-cell *matHeaderCellDef>ID</th>
@@ -113,6 +133,20 @@ import { EmptyStateComponent } from '../../shared/empty-state.component';
         background: var(--color-tier-elite-bg);
         color: var(--color-tier-elite);
       }
+      .team-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        color: white;
+        font-size: var(--font-size-xs);
+        font-weight: 600;
+      }
+      .team-chip-emoji {
+        font-size: 14px;
+        line-height: 1;
+      }
     `,
   ],
 })
@@ -121,16 +155,32 @@ export class ProjectsComponent {
 
   loading = signal(false);
   projects = signal<Project[]>([]);
-  cols = ['path', 'id', 'active'];
+  teams = signal<Team[]>([]);
+  cols = ['path', 'team', 'id', 'active'];
+
+  private teamsById = computed(() => {
+    const m = new Map<string, Team>();
+    for (const t of this.teams()) m.set(t.id, t);
+    return m;
+  });
+
+  teamFor(teamId: string | null | undefined): Team | undefined {
+    if (!teamId) return undefined;
+    return this.teamsById().get(teamId);
+  }
 
   constructor() {
     this.loading.set(true);
-    this.api
-      .listProjects()
-      .pipe(
-        catchError(() => of([] as Project[])),
-        finalize(() => this.loading.set(false)),
-      )
-      .subscribe((p) => this.projects.set(p));
+    forkJoin({
+      projects: this.api.listProjects().pipe(catchError(() => of([] as Project[]))),
+      teams: this.api
+        .listTeams('acme')
+        .pipe(catchError(() => of([] as Team[]))),
+    })
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe(({ projects, teams }) => {
+        this.projects.set(projects);
+        this.teams.set(teams);
+      });
   }
 }

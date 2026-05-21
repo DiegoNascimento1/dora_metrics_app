@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import {
   CreatePersonRequest,
   CreateSourceInstanceRequest,
+  CreateTeamRequest,
   Deployment,
   DoraMetrics,
   Identity,
@@ -15,9 +16,11 @@ import {
   Project,
   ProjectAchievements,
   SourceInstance,
+  Team,
   TestConnectionRequest,
   TestConnectionResponse,
   TimeseriesResponse,
+  UpdateTeamRequest,
 } from './api.types';
 
 const API_BASE = '/api/v1';
@@ -134,6 +137,38 @@ export class ApiClient {
     return this.http.post<TestConnectionResponse>(
       `${API_BASE}/source-instances/test`,
       body,
+    );
+  }
+
+  // ---- teams (multi-team UI) ----
+
+  listTeams(tenant: string): Observable<Team[]> {
+    return this.http.get<Team[]>(`${API_BASE}/teams`, { params: { tenant } });
+  }
+
+  createTeam(body: CreateTeamRequest): Observable<Team> {
+    return this.http.post<Team>(`${API_BASE}/teams`, body);
+  }
+
+  updateTeam(id: string, body: UpdateTeamRequest): Observable<Team> {
+    return this.http.patch<Team>(`${API_BASE}/teams/${id}`, body);
+  }
+
+  deleteTeam(id: string): Observable<void> {
+    return this.http.delete<void>(`${API_BASE}/teams/${id}`);
+  }
+
+  assignProjectToTeam(teamId: string, projectId: string): Observable<Project> {
+    return this.http.post<Project>(
+      `${API_BASE}/teams/${teamId}/projects`,
+      { projectId },
+    );
+  }
+
+  unassignProjectFromTeam(projectId: string): Observable<Project> {
+    return this.http.post<Project>(
+      `${API_BASE}/projects/${projectId}/unassign-team`,
+      {},
     );
   }
 

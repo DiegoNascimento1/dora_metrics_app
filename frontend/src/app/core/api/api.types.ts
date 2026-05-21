@@ -142,3 +142,26 @@ export interface TestConnectionResponse {
   status?: number;
   message?: string;
 }
+
+export interface Team {
+  id: string;
+  slug: string;
+  name: string;
+  color: string | null;
+  emoji: string | null;
+  createdAt: string;
+}
+
+export interface CreateTeamRequest {
+  tenant: string;
+  slug: string;
+  name: string;
+  color?: string;
+  emoji?: string;
+}
+
+export interface UpdateTeamRequest {
+  name?: string | null;
+  color?: string | null;
+  emoji?: string | null;
+}
