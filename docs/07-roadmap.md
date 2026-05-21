@@ -58,7 +58,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 - [x] Drill-down — clicar/abrir mostra lista de deployments via `/deployments`
 - [ ] Autenticação OIDC — pendente (requer IdP do cliente)
 - [ ] Refactor do coletor Jira para usar MCP Atlassian (`mcp.atlassian.com/v1/mcp`) com REST como fallback
-- [ ] Multi-projeto e multi-time (filtros e agrupamentos no UI) — projeto já tem dropdown; agrupamento por time ainda não
+- [x] Multi-projeto e multi-time — dashboard tem toggle "Escopo" (projeto/time); quando time, métricas DORA são agregadas via SQL JOIN em `platform.project.team_id`. 5 queries novas (`*ForTeamInWindow`) + 2 endpoints `/api/v1/teams/{id}/metrics` + `/timeseries`. Drill-down + achievements ainda são project-scope only.
 
 **Critério de saída:** stakeholders conseguem abrir o dashboard, comparar 2 times, e identificar visualmente uma piora. Hoje conseguem ver 1 projeto por vez com tiles + curva + drill-down.
 
