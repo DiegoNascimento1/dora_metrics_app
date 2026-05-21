@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   CreatePersonRequest,
+  CreateSourceInstanceRequest,
   Deployment,
   DoraMetrics,
   Identity,
@@ -13,6 +14,9 @@ import {
   PersonWithIdentities,
   Project,
   ProjectAchievements,
+  SourceInstance,
+  TestConnectionRequest,
+  TestConnectionResponse,
   TimeseriesResponse,
 } from './api.types';
 
@@ -107,6 +111,29 @@ export class ApiClient {
     return this.http.get<PersonMetrics>(
       `${API_BASE}/people/${personId}/metrics`,
       { params: { window } },
+    );
+  }
+
+  // ---- source instances (settings) ----
+
+  listSourceInstances(tenant: string): Observable<SourceInstance[]> {
+    return this.http.get<SourceInstance[]>(`${API_BASE}/source-instances`, {
+      params: { tenant },
+    });
+  }
+
+  createSourceInstance(body: CreateSourceInstanceRequest): Observable<SourceInstance> {
+    return this.http.post<SourceInstance>(`${API_BASE}/source-instances`, body);
+  }
+
+  deleteSourceInstance(id: string): Observable<void> {
+    return this.http.delete<void>(`${API_BASE}/source-instances/${id}`);
+  }
+
+  testConnection(body: TestConnectionRequest): Observable<TestConnectionResponse> {
+    return this.http.post<TestConnectionResponse>(
+      `${API_BASE}/source-instances/test`,
+      body,
     );
   }
 

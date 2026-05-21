@@ -109,3 +109,36 @@ export interface ProjectAchievements {
   currentClassification: Classification;
   achievements: Achievement[];
 }
+
+export interface SourceInstance {
+  id: string;
+  kind: 'gitlab' | 'jira';
+  baseUrl: string;
+  displayName: string;
+  authRef: string;
+  authEmail?: string;
+  hasSecret: boolean;
+  createdAt: string;
+}
+
+export interface CreateSourceInstanceRequest {
+  tenant: string;
+  kind: 'gitlab' | 'jira';
+  baseUrl: string;
+  displayName: string;
+  secret: string;
+  authEmail?: string;
+}
+
+export interface TestConnectionRequest {
+  kind: 'gitlab' | 'jira';
+  baseUrl: string;
+  secret: string;
+  authEmail?: string;
+}
+
+export interface TestConnectionResponse {
+  ok: boolean;
+  status?: number;
+  message?: string;
+}
