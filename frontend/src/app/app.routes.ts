@@ -42,6 +42,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'alerts',
+    loadComponent: () =>
+      import('./features/alerts/alerts.component').then(
+        (m) => m.AlertsComponent,
+      ),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.component').then(

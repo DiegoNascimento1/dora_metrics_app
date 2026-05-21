@@ -165,3 +165,54 @@ export interface UpdateTeamRequest {
   color?: string | null;
   emoji?: string | null;
 }
+
+export type AlertKind = 'tier_regression' | 'tier_change';
+export type AlertScopeKind = 'project' | 'team' | 'tenant';
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: AlertKind;
+  scopeKind: AlertScopeKind;
+  scopeId: string | null;
+  windowDays: 7 | 30 | 90;
+  webhookUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAlertRuleRequest {
+  tenant: string;
+  name: string;
+  enabled?: boolean;
+  kind: AlertKind;
+  scopeKind: AlertScopeKind;
+  scopeId?: string | null;
+  windowDays: 7 | 30 | 90;
+  webhookUrl: string;
+}
+
+export interface UpdateAlertRuleRequest {
+  name?: string;
+  enabled?: boolean;
+  kind?: AlertKind;
+  scopeKind?: AlertScopeKind;
+  scopeId?: string | null;
+  windowDays?: 7 | 30 | 90;
+  webhookUrl?: string;
+}
+
+export interface AlertEvent {
+  id: string;
+  ruleId: string;
+  firedAt: string;
+  scopeKind: AlertScopeKind;
+  scopeId: string;
+  previousTier: string | null;
+  currentTier: string;
+  deliveryStatus: 'pending' | 'delivered' | 'failed';
+  httpStatus: number | null;
+  lastError: string | null;
+  deliveredAt: string | null;
+}

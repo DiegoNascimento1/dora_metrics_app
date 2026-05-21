@@ -3,6 +3,9 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import {
+  AlertEvent,
+  AlertRule,
+  CreateAlertRuleRequest,
   CreatePersonRequest,
   CreateSourceInstanceRequest,
   CreateTeamRequest,
@@ -20,6 +23,7 @@ import {
   TestConnectionRequest,
   TestConnectionResponse,
   TimeseriesResponse,
+  UpdateAlertRuleRequest,
   UpdateTeamRequest,
 } from './api.types';
 
@@ -190,6 +194,32 @@ export class ApiClient {
       `${API_BASE}/teams/${teamId}/timeseries`,
       { params: { window } },
     );
+  }
+
+  // ---- alert rules (Fase 4) ----
+
+  listAlertRules(tenant: string): Observable<AlertRule[]> {
+    return this.http.get<AlertRule[]>(`${API_BASE}/alert-rules`, {
+      params: { tenant },
+    });
+  }
+
+  createAlertRule(body: CreateAlertRuleRequest): Observable<AlertRule> {
+    return this.http.post<AlertRule>(`${API_BASE}/alert-rules`, body);
+  }
+
+  updateAlertRule(id: string, body: UpdateAlertRuleRequest): Observable<AlertRule> {
+    return this.http.patch<AlertRule>(`${API_BASE}/alert-rules/${id}`, body);
+  }
+
+  deleteAlertRule(id: string): Observable<void> {
+    return this.http.delete<void>(`${API_BASE}/alert-rules/${id}`);
+  }
+
+  listAlertEvents(tenant: string, limit = 50): Observable<AlertEvent[]> {
+    return this.http.get<AlertEvent[]>(`${API_BASE}/alert-events`, {
+      params: { tenant, limit },
+    });
   }
 
   healthz(): Observable<{ status: string }> {
