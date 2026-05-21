@@ -173,7 +173,7 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
     - ⚡ *Speed Demon* — Lead Time mediano < 1h por 4 semanas consecutivas
     - 🔁 *Recovery Master* — MTTR < 1h em 5 incidents consecutivos
     - 📈 *Most Improved* — maior salto de tier no trimestre
-- [ ] **Leaderboard entre times** do mesmo tenant (opt-in por tenant) — comparação por tier combinado e por métrica individual. Sem punição: bottom-team aparece como "in growth"
+- [x] **Leaderboard entre times** — rota `/leaderboard` com ranking por tier (Elite/High/Medium/Low) + tiebreaker por DF + alfabético. Badge "Liderando" no #1 (workspace_premium), "Em crescimento" no último (trending_up); copy no header reforça que é celebração, não ranking punitivo. Frontend-only por enquanto (forkJoin de N `getTeamMetrics`); endpoint dedicado `/leaderboard` quando time-count crescer
 - [ ] **Progress bars** mostrando "quão perto" o time está do próximo tier (ex: "+0.12 deploys/dia para Elite")
 - [ ] **Weekly digest** — card semanal: "essa semana 12 deploys, 0 incidents, +1 tier em LT" — formato compartilhável (PNG/Slack-friendly)
 - [ ] **Team identity** — cada time escolhe nome, cor, mascote/emoji opcional (afeta o leaderboard e os cards)
