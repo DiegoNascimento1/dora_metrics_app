@@ -25,6 +25,10 @@ type Querier interface {
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
 	CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (PlatformTenant, error)
+	// Dias completos desde o último incident production-impactante do projeto
+	// (via mapping jira_project_keys). NULL se o projeto nunca teve incident
+	// ou se não tem jira_project_keys configurado.
+	DaysSinceLastIncidentForProject(ctx context.Context, projectID uuid.UUID) (int32, error)
 	// Série temporal de deployments de produção bem-sucedidos por dia (UTC).
 	// Drive da curva de Deployment Frequency.
 	DeploymentsPerDayInWindow(ctx context.Context, arg DeploymentsPerDayInWindowParams) ([]DeploymentsPerDayInWindowRow, error)
