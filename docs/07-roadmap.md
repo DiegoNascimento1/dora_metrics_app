@@ -91,7 +91,7 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 - [x] Endpoints REST: `GET/POST /api/v1/people`, `GET /api/v1/identities/unlinked`, `GET /api/v1/identities/automatch`, `POST /api/v1/identities/{id}/link`
 - [x] CLI: `cli people backfill | list-unlinked | create | link | automatch --tenant X`
 - [x] Frontend: tela "Pessoas" (`/people`) com sugestões automatch, lista de pessoas vinculadas e identidades não-vinculadas. Botões "Aplicar sugestão" (cria pessoa + linka 2 identities) e "Criar nova pessoa" (a partir de 1 identidade)
-- [x] Frontend: UX de **drag-and-drop** entre identidades — CDK drag-drop arrastando da coluna "Não vinculadas" para o card de uma pessoa; com hover state "drop-zone-active" tingindo o card alvo
+- [x] Frontend: UX de **drag-and-drop** entre identidades — CDK drag-drop arrastando da coluna "Não vinculadas" para o card de uma pessoa; hover usa as classes nativas do CDK (`cdk-drop-list-receiving` / `cdk-drop-list-dragging`) tingindo o card-alvo em azul brand
 - [x] Refactor: `merge_request.author_person_id` + `deployment.triggerer_person_id` (migration 0007) populados por `PropagatePersonToMergeRequests` / `PropagatePersonToDeployments`. Propagação automática após `LinkIdentityToPerson` (API + CLI) + CLI manual `cli people propagate`
 - [x] Métricas por pessoa: `GET /api/v1/people/{id}/metrics?window=30d` (deploys triggered, lead time mediano, incidents vinculados). Render inline em cada person card no `/people`. Caveat ético registrado no endpoint + OpenAPI
 
@@ -147,7 +147,7 @@ Não pertencem a uma fase específica; evoluem em paralelo.
 - [x] Paleta: neutros sóbrios (navy `#1e3a8a`, slate-graphite, off-white) + **acentos reservados pra status** (Elite verde sóbrio, High azul, Medium âmbar, Low vermelho refinado)
 - [x] Tipografia: Inter (variable) + JetBrains Mono pra SHAs/IDs, carregados via Google Fonts em [index.html](../frontend/src/index.html)
 - [x] Tema **claro + escuro** com persistência — `ThemeService` reativo (signal + `prefers-color-scheme`) + toggle na toolbar + `localStorage`. Modos: `light` / `dark` / `system` (default). Chart e Material form-fields cobertos no dark
-- [x] WCAG AA: paleta calibrada (Elite verde escuro sobre branco; chip Medium âmbar usa texto preto para contraste). Foco visível: pendente revisar todos os interativos
+- [x] WCAG AA: paleta calibrada (Elite verde escuro sobre branco; chip Medium âmbar usa texto preto para contraste). Foco visível via `:focus-visible` global com outline brand 2px e offset 2-3px; só mostra em keyboard nav (não em mouse click)
 - [x] Iconografia: Material Symbols Outlined (variable) carregado globalmente
 - [ ] Empty states, loading skeletons e error states desenhados (mat-spinner básico hoje; falta polish)
 - [ ] Logo + favicon + open graph
@@ -156,11 +156,16 @@ Não pertencem a uma fase específica; evoluem em paralelo.
 
 Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunca métrica punitiva.
 
-- [x] **Tier badges animados** — chip Elite tem animação `tier-breathe` 4s (scale 1.000→1.015, soft glow); respeita `prefers-reduced-motion`. Pendente: pareamento com ícone Material por tier (cor sozinha não basta para acessibilidade)
-- [ ] **Streaks** — "23 dias sem Change Failure" com fogo emoji ou ícone de chama; quebra de streak mostra duração anterior + botão "retomar"
-- [ ] **Achievements / conquistas** (desbloqueáveis por time):
+- [x] **Tier badges animados** — chip Elite tem animação `tier-breathe` 4s (scale 1.000→1.015, soft glow); respeita `prefers-reduced-motion`. Cada tier carrega ícone Material Symbol via `::before` (workspace_premium / trending_up / remove / trending_down / help) — atende SC 1.4.1 (cor não pode ser única forma de transmitir informação)
+- [x] **Streaks** — endpoint `/projects/{id}/achievements` retorna `daysSinceLastIncident`; card no dashboard com contador grande + ícone `local_fire_department`. Empty state (`-1`) orienta a configurar `jira_project_keys`
+- [x] **Achievements** (primeira batch — pacote `internal/gamification`, 100% test coverage):
+    - 🔥 *Week Streak* — 7+ dias sem incident
+    - 🛡️ *Steady Hand* — 30+ dias sem incident
+    - 🛡️ *100 Green Days* — 100+ dias sem incident
+    - 🏆 *Elite Tier* — classificação combinada = elite na janela atual
+    Tiers de streak são mutuamente exclusivos (só o mais alto fica visível).
+- [ ] **Achievements** (próxima batch):
     - 🚀 *First Elite Month* — primeiro mês inteiro classificação Elite combinada
-    - 🛡️ *100 Green Days* — 100 dias sem incident production-impacting
     - ⚡ *Speed Demon* — Lead Time mediano < 1h por 4 semanas consecutivas
     - 🔁 *Recovery Master* — MTTR < 1h em 5 incidents consecutivos
     - 📈 *Most Improved* — maior salto de tier no trimestre
@@ -192,6 +197,8 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 
 - [x] Unit tests do `calculator` — 100% coverage
 - [x] Unit tests do cliente GitLab — 52% coverage (httptest)
+- [x] Unit tests do `internal/identities` (auto-match heurístico) — 97% coverage
+- [x] Unit tests do `internal/gamification` (regras de achievements) — 100% coverage
 - [x] CI executa `make test` (backend, com Postgres 18 como service) e `npm test -- --watch=false --browsers=ChromeHeadless` (frontend) em todo push/PR ([.github/workflows/ci.yml](../.github/workflows/ci.yml))
 - [ ] Unit tests do cliente Jira REST
 - [ ] Integration tests dos handlers asynq (com Postgres real via Testcontainers)
