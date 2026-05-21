@@ -7,13 +7,16 @@ import {
 } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { forkJoin, of, catchError, finalize } from 'rxjs';
+
+import { SkeletonComponent } from '../../shared/skeleton.component';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
 
 import { ApiClient } from '../../core/api/api.client';
 import {
@@ -42,13 +45,15 @@ type Window = '7d' | '30d' | '90d';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
+    RouterLink,
     MatCardModule,
     MatChipsModule,
-    MatProgressSpinnerModule,
     MatSelectModule,
     MatFormFieldModule,
     MatButtonModule,
     MatIconModule,
+    SkeletonComponent,
+    EmptyStateComponent,
     TimeseriesChartComponent,
     DeploymentsTableComponent,
     AchievementsCardComponent,
@@ -59,12 +64,15 @@ type Window = '7d' | '30d' | '90d';
     @if (projects().length === 0 && !loading()) {
       <mat-card appearance="outlined">
         <mat-card-content>
-          Nenhum projeto cadastrado ainda. Use a CLI para adicionar:
-          <pre>
-docker compose run --rm cli project add \\
-  --tenant acme --source gitlab-prod \\
-  --external-id 123 --path acme/api
-          </pre>
+          <app-empty-state
+            icon="rocket_launch"
+            title="Bem-vindo ao DORA Metrics"
+            description="Primeiro passo: conecte uma instância GitLab/Jira e cadastre um projeto para começar a ver suas 4 métricas em ação."
+          >
+            <a mat-flat-button color="primary" routerLink="/settings">
+              <mat-icon>cable</mat-icon> Conectar GitLab/Jira
+            </a>
+          </app-empty-state>
         </mat-card-content>
       </mat-card>
     } @else {
@@ -94,7 +102,19 @@ docker compose run --rm cli project add \\
       </div>
 
       @if (loading()) {
-        <mat-progress-spinner mode="indeterminate" diameter="40" />
+        <div class="grid">
+          @for (_ of [0, 1, 2, 3]; track $index) {
+            <mat-card appearance="outlined" class="skel-tile">
+              <app-skeleton variant="text" width="60%" />
+              <app-skeleton variant="title" width="40%" />
+              <app-skeleton variant="chip" width="80px" />
+            </mat-card>
+          }
+        </div>
+        <mat-card appearance="outlined" class="chart-card">
+          <app-skeleton variant="text" width="40%" />
+          <app-skeleton variant="card" height="200px" />
+        </mat-card>
       } @else if (error()) {
         <mat-card appearance="outlined" class="error">
           <mat-card-content>{{ error() }}</mat-card-content>
@@ -183,6 +203,16 @@ docker compose run --rm cli project add \\
       .chart-card,
       .table-card {
         margin-top: 24px;
+      }
+      .skel-tile {
+        padding: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      .chart-card app-skeleton {
+        display: block;
+        margin: var(--space-3) 0;
       }
       .empty {
         color: #888;

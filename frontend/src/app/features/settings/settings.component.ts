@@ -13,12 +13,13 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { catchError, finalize, of } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api.client';
 import { SourceInstance } from '../../core/api/api.types';
+import { SkeletonComponent } from '../../shared/skeleton.component';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
 import {
   IntegrationDialogComponent,
   IntegrationDialogData,
@@ -37,8 +38,9 @@ import {
     MatFormFieldModule,
     MatInputModule,
     MatDialogModule,
-    MatProgressSpinnerModule,
     MatSnackBarModule,
+    SkeletonComponent,
+    EmptyStateComponent,
   ],
   template: `
     <h1>Configurações</h1>
@@ -55,7 +57,16 @@ import {
     </div>
 
     @if (loading()) {
-      <mat-progress-spinner mode="indeterminate" diameter="40" />
+      <div class="grid">
+        @for (_ of [0, 1]; track $index) {
+          <mat-card appearance="outlined" class="skel-card">
+            <app-skeleton variant="chip" width="60px" />
+            <app-skeleton variant="title" width="50%" />
+            <app-skeleton variant="text" width="80%" />
+            <app-skeleton variant="card" height="64px" />
+          </mat-card>
+        }
+      </div>
     } @else {
       <div class="grid">
         <mat-card appearance="outlined" class="integration-card">
@@ -81,10 +92,11 @@ import {
           </mat-card-header>
           <mat-card-content>
             @if (gitlabInstances().length === 0) {
-              <p class="empty">
-                <mat-icon class="empty-icon">cable</mat-icon>
-                Nenhuma instância GitLab conectada ainda.
-              </p>
+              <app-empty-state
+                icon="cable"
+                title="Nenhum GitLab conectado"
+                description="Adicione uma instância para começar a coletar deployments e merge requests."
+              />
             } @else {
               @for (i of gitlabInstances(); track i.id) {
                 <div class="integration-row">
@@ -134,10 +146,11 @@ import {
           </mat-card-header>
           <mat-card-content>
             @if (jiraInstances().length === 0) {
-              <p class="empty">
-                <mat-icon class="empty-icon">cable</mat-icon>
-                Nenhuma instância Jira conectada ainda.
-              </p>
+              <app-empty-state
+                icon="cable"
+                title="Nenhum Jira conectado"
+                description="Adicione um site Atlassian para começar a coletar incidents (Change Failure Rate + MTTR)."
+              />
             } @else {
               @for (i of jiraInstances(); track i.id) {
                 <div class="integration-row">
@@ -289,6 +302,12 @@ import {
         border-radius: var(--radius-sm);
         font-family: var(--font-mono);
         font-size: 0.85em;
+      }
+      .skel-card {
+        padding: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
       }
     `,
   ],

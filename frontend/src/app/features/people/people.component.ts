@@ -19,11 +19,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { forkJoin, of, catchError, finalize, Observable } from 'rxjs';
 
 import { ApiClient } from '../../core/api/api.client';
+import { SkeletonComponent } from '../../shared/skeleton.component';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
 import {
   Identity,
   MergeSuggestion,
@@ -54,8 +55,9 @@ type Window = '7d' | '30d' | '90d';
     MatChipsModule,
     MatFormFieldModule,
     MatInputModule,
-    MatProgressSpinnerModule,
     MatSnackBarModule,
+    SkeletonComponent,
+    EmptyStateComponent,
   ],
   template: `
     <h1>Pessoas e identidades</h1>
@@ -71,7 +73,16 @@ type Window = '7d' | '30d' | '90d';
     </div>
 
     @if (loading()) {
-      <mat-progress-spinner mode="indeterminate" diameter="40" />
+      <mat-card appearance="outlined" class="skel-card">
+        <app-skeleton variant="title" width="30%" />
+        @for (_ of [0, 1, 2]; track $index) {
+          <div class="skel-row">
+            <app-skeleton variant="chip" width="60px" />
+            <app-skeleton variant="text" width="200px" />
+            <app-skeleton variant="text" width="240px" />
+          </div>
+        }
+      </mat-card>
     } @else {
       <!-- Sugestões automáticas -->
       @if (suggestions().length > 0) {
@@ -140,10 +151,11 @@ type Window = '7d' | '30d' | '90d';
           @if (people().length === 0) {
             <mat-card appearance="outlined">
               <mat-card-content>
-                <p class="muted">
-                  Nenhuma pessoa cadastrada. Aceite uma sugestão ou crie
-                  arrastando uma identidade da coluna ao lado para esta área.
-                </p>
+                <app-empty-state
+                  icon="group"
+                  title="Nenhuma pessoa ainda"
+                  description="Aceite uma sugestão automática ou arraste uma identidade da coluna ao lado para criar a primeira pessoa."
+                />
               </mat-card-content>
             </mat-card>
           }
@@ -202,7 +214,11 @@ type Window = '7d' | '30d' | '90d';
           @if (unlinked().length === 0) {
             <mat-card appearance="outlined">
               <mat-card-content>
-                <p class="muted">Tudo vinculado.</p>
+                <app-empty-state
+                  icon="task_alt"
+                  title="Tudo vinculado"
+                  description="Não há identidades pendentes de merge. Próximos usernames vistos em commits/deploys vão aparecer aqui."
+                />
               </mat-card-content>
             </mat-card>
           } @else {
@@ -377,6 +393,18 @@ type Window = '7d' | '30d' | '90d';
       .confidence-high {
         color: var(--color-tier-elite);
         font-weight: 600;
+      }
+      .skel-card {
+        padding: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      .skel-row {
+        display: flex;
+        gap: var(--space-3);
+        padding: var(--space-2) 0;
+        align-items: center;
       }
     `,
   ],
