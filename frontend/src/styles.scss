@@ -3,6 +3,34 @@
 
 /* DORA Metrics — estilos globais */
 
+/* ---- Material Symbols Outlined: força o font-family + ligature em todo
+   mat-icon e classes nativas. O Angular Material por default aponta para
+   'Material Icons' (que não carregamos), e sem font-feature-settings o
+   navegador não converte o texto "settings" no glifo. */
+.material-symbols-outlined,
+.mat-icon,
+mat-icon {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -171,4 +199,52 @@ mat-card-subtitle {
 /* Spinner — usa cor brand */
 .mat-mdc-progress-spinner {
   --mdc-circular-progress-active-indicator-color: var(--color-brand);
+}
+
+/* ---- Material 3 system tokens no dark theme ----
+   O prebuilt azure-blue.css é light-only (hardcoded hex). Quando o usuário
+   liga o dark, nossos tokens locais flipam mas os --mat-sys-* continuam
+   com texto quase-preto sobre superfícies escuras. Reescrevemos os tokens
+   essenciais aqui. */
+[data-theme="dark"] {
+  /* Surfaces */
+  --mat-sys-background:                   #020617;
+  --mat-sys-surface:                      #0f172a;
+  --mat-sys-surface-bright:               #1e293b;
+  --mat-sys-surface-dim:                  #020617;
+  --mat-sys-surface-container-lowest:     #020617;
+  --mat-sys-surface-container-low:        #0f172a;
+  --mat-sys-surface-container:            #1e293b;
+  --mat-sys-surface-container-high:       #1e293b;
+  --mat-sys-surface-container-highest:    #334155;
+  --mat-sys-surface-variant:              #1e293b;
+  --mat-sys-surface-tint:                 #60a5fa;
+  --mat-sys-inverse-surface:              #f1f5f9;
+  --mat-sys-inverse-on-surface:           #0f172a;
+
+  /* Text ("on" colors) */
+  --mat-sys-on-background:                #f1f5f9;
+  --mat-sys-on-surface:                   #f1f5f9;
+  --mat-sys-on-surface-variant:           #cbd5e1;
+  --mat-sys-outline:                      #475569;
+  --mat-sys-outline-variant:              #334155;
+
+  /* Primary (brand) */
+  --mat-sys-primary:                      #60a5fa;
+  --mat-sys-on-primary:                   #0f172a;
+  --mat-sys-primary-container:            #1e3a8a;
+  --mat-sys-on-primary-container:         #dbeafe;
+  --mat-sys-inverse-primary:              #2563eb;
+
+  /* Secondary */
+  --mat-sys-secondary:                    #94a3b8;
+  --mat-sys-on-secondary:                 #0f172a;
+  --mat-sys-secondary-container:          #334155;
+  --mat-sys-on-secondary-container:       #f1f5f9;
+
+  /* Error */
+  --mat-sys-error:                        #f87171;
+  --mat-sys-on-error:                     #450a0a;
+  --mat-sys-error-container:              #7f1d1d;
+  --mat-sys-on-error-container:           #fee2e2;
 }
