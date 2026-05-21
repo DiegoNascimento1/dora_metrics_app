@@ -52,6 +52,39 @@ type MetricsMetricWindow struct {
 	SampleSize          int32          `json:"sample_size"`
 }
 
+// Histórico imutável de alertas disparados. Status de entrega rastreado pra retry/debug.
+type PlatformAlertEvent struct {
+	ID             uuid.UUID          `json:"id"`
+	RuleID         uuid.UUID          `json:"rule_id"`
+	TenantID       uuid.UUID          `json:"tenant_id"`
+	FiredAt        time.Time          `json:"fired_at"`
+	ScopeKind      string             `json:"scope_kind"`
+	ScopeID        uuid.UUID          `json:"scope_id"`
+	PreviousTier   *string            `json:"previous_tier"`
+	CurrentTier    string             `json:"current_tier"`
+	Payload        []byte             `json:"payload"`
+	DeliveryStatus string             `json:"delivery_status"`
+	HttpStatus     *int32             `json:"http_status"`
+	LastError      *string            `json:"last_error"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+}
+
+// Regras de alerta sobre mudança de classificação DORA. Disparam por scope+window_days.
+type PlatformAlertRule struct {
+	ID        uuid.UUID `json:"id"`
+	TenantID  uuid.UUID `json:"tenant_id"`
+	Name      string    `json:"name"`
+	Enabled   bool      `json:"enabled"`
+	Kind      string    `json:"kind"`
+	ScopeKind string    `json:"scope_kind"`
+	// NULL = aplica a todos os escopos do scope_kind dentro do tenant.
+	ScopeID    pgtype.UUID `json:"scope_id"`
+	WindowDays int32       `json:"window_days"`
+	WebhookUrl string      `json:"webhook_url"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+}
+
 type PlatformClassificationThreshold struct {
 	TenantID uuid.UUID `json:"tenant_id"`
 	Config   []byte    `json:"config"`

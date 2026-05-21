@@ -17,6 +17,7 @@ const (
 	TaskCollectJira          = "collect:jira:incidents"
 	TaskComputeMetricWindow  = "compute:metric_window"
 	TaskSnapshotMonthly      = "snapshot:monthly"
+	TaskDispatchAlert        = "dispatch:alert"
 )
 
 // Filas (declaradas no asynq.Config).
@@ -110,5 +111,25 @@ func NewComputeMetricWindowTask(projectID uuid.UUID, windowDays int) (*asynq.Tas
 		TaskComputeMetricWindow, payload,
 		asynq.Queue(QueueCompute),
 		asynq.MaxRetry(2),
+	), nil
+}
+
+// DispatchAlertPayload é o payload da task dispatch:alert. O alert_event já
+// foi persistido em "pending"; o handler é responsável por entregar o
+// webhook e marcar delivered/failed conforme o resultado.
+type DispatchAlertPayload struct {
+	EventID uuid.UUID `json:"event_id"`
+}
+
+// NewDispatchAlertTask constrói a task de entrega de alerta.
+func NewDispatchAlertTask(eventID uuid.UUID) (*asynq.Task, error) {
+	payload, err := json.Marshal(DispatchAlertPayload{EventID: eventID})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(
+		TaskDispatchAlert, payload,
+		asynq.Queue(QueueDefault),
+		asynq.MaxRetry(5),
 	), nil
 }

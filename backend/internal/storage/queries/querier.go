@@ -34,6 +34,7 @@ type Querier interface {
 	// tem significado.
 	CountSuccessfulProductionDeploymentsForTeamInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsForTeamInWindowParams) (int64, error)
 	CountSuccessfulProductionDeploymentsInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsInWindowParams) (int64, error)
+	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (PlatformAlertRule, error)
 	CreatePerson(ctx context.Context, arg CreatePersonParams) (PlatformPerson, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
 	CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error)
@@ -44,6 +45,7 @@ type Querier interface {
 	// incident registrado (ou não tem jira_project_keys configurado).
 	// O caller trata -1 como "sem incidents — streak infinito ainda não é mérito".
 	DaysSinceLastIncidentForProject(ctx context.Context, projectID uuid.UUID) (interface{}, error)
+	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
 	DeleteSourceInstance(ctx context.Context, id uuid.UUID) error
 	DeleteTeam(ctx context.Context, id uuid.UUID) error
 	DeploymentsPerDayForTeamInWindow(ctx context.Context, arg DeploymentsPerDayForTeamInWindowParams) ([]DeploymentsPerDayForTeamInWindowRow, error)
@@ -60,8 +62,13 @@ type Querier interface {
 	// entre diferentes kinds. Usado para sugerir merges de "alice" do GitLab com
 	// "alice" do Jira quando emails não estão disponíveis.
 	FindIdentitiesByUsername(ctx context.Context, arg FindIdentitiesByUsernameParams) ([]PlatformPersonIdentity, error)
+	// Localiza regras habilitadas que cobrem um scope+window específico.
+	// scope_id NULL na regra = matches all scopes do tipo dentro do tenant.
+	FindMatchingAlertRules(ctx context.Context, arg FindMatchingAlertRulesParams) ([]PlatformAlertRule, error)
 	// Auto-match: dado um email, devolve a person que casa.
 	FindPersonByEmail(ctx context.Context, arg FindPersonByEmailParams) (PlatformPerson, error)
+	GetAlertEvent(ctx context.Context, id uuid.UUID) (PlatformAlertEvent, error)
+	GetAlertRule(ctx context.Context, id uuid.UUID) (PlatformAlertRule, error)
 	GetClassificationThreshold(ctx context.Context, tenantID uuid.UUID) (PlatformClassificationThreshold, error)
 	GetFirstSourceInstanceForTenantKind(ctx context.Context, arg GetFirstSourceInstanceForTenantKindParams) (PlatformSourceInstance, error)
 	// Encontra o projeto pelo external_id assumindo source kind='gitlab'.
@@ -79,6 +86,7 @@ type Querier interface {
 	GetTeam(ctx context.Context, id uuid.UUID) (PlatformTeam, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (PlatformTenant, error)
 	GetTenantBySlug(ctx context.Context, slug string) (PlatformTenant, error)
+	InsertAlertEvent(ctx context.Context, arg InsertAlertEventParams) (PlatformAlertEvent, error)
 	InsertRawEvent(ctx context.Context, arg InsertRawEventParams) (RawRawEvent, error)
 	// Lead Time mediano dos MRs autorados pela pessoa cujos deployments de
 	// produção bem-sucedidos vinculados caem na janela.
@@ -94,6 +102,8 @@ type Querier interface {
 	// Projects cujos jira_project_keys contêm a chave passada (case-sensitive).
 	// Usado por webhook Jira para identificar quais nossos projetos refrescar.
 	ListActiveProjectsByJiraProjectKey(ctx context.Context, jiraProjectKey string) ([]PlatformProject, error)
+	ListAlertEventsByRule(ctx context.Context, arg ListAlertEventsByRuleParams) ([]PlatformAlertEvent, error)
+	ListAlertRulesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformAlertRule, error)
 	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]PlatformEnvironment, error)
 	// Backfill: usernames únicos que já apareceram em merge_request.author_username
 	// ou deployment.triggered_by, restrito ao tenant via JOIN com project.
@@ -114,6 +124,7 @@ type Querier interface {
 	ListProductionDeploymentsInWindow(ctx context.Context, arg ListProductionDeploymentsInWindowParams) ([]ListProductionDeploymentsInWindowRow, error)
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
 	ListProjectsByTeam(ctx context.Context, teamID pgtype.UUID) ([]PlatformProject, error)
+	ListRecentAlertEvents(ctx context.Context, arg ListRecentAlertEventsParams) ([]PlatformAlertEvent, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
 	ListTeamsByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformTeam, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)
@@ -125,6 +136,8 @@ type Querier interface {
 	// Média (segundos) de (resolved_at - created_at) para incidents do projeto
 	// resolvidos na janela. NULL quando não houver amostra; caller checa sample.
 	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
+	MarkAlertEventDelivered(ctx context.Context, arg MarkAlertEventDeliveredParams) error
+	MarkAlertEventFailed(ctx context.Context, arg MarkAlertEventFailedParams) error
 	MarkRawEventProcessed(ctx context.Context, arg MarkRawEventProcessedParams) error
 	PropagatePersonToDeployments(ctx context.Context) (int64, error)
 	// Atualiza merge_request.author_person_id para todos os MRs cujo
@@ -132,6 +145,7 @@ type Querier interface {
 	// à pessoa, no mesmo tenant. Idempotente.
 	PropagatePersonToMergeRequests(ctx context.Context) (int64, error)
 	UnlinkIdentity(ctx context.Context, id uuid.UUID) error
+	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (PlatformAlertRule, error)
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpdateSourceInstanceSecret(ctx context.Context, arg UpdateSourceInstanceSecretParams) (PlatformSourceInstance, error)
 	UpdateTeam(ctx context.Context, arg UpdateTeamParams) (PlatformTeam, error)

@@ -83,6 +83,12 @@ func (s *Server) routes() {
 		r.Get("/teams/{teamId}/metrics", s.handleTeamMetrics())
 		r.Get("/teams/{teamId}/timeseries", s.handleTeamTimeseries())
 		r.Post("/projects/{projectId}/unassign-team", s.handleUnassignProjectFromTeam())
+
+		r.Get("/alert-rules", s.handleListAlertRules())
+		r.Post("/alert-rules", s.handleCreateAlertRule())
+		r.Patch("/alert-rules/{ruleId}", s.handleUpdateAlertRule())
+		r.Delete("/alert-rules/{ruleId}", s.handleDeleteAlertRule())
+		r.Get("/alert-events", s.handleListAlertEvents())
 	})
 
 	r.Route("/webhooks", func(r chi.Router) {

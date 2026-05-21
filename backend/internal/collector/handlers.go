@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 
+	"github.com/dora-metrics-app/backend/internal/alerts"
 	"github.com/dora-metrics-app/backend/internal/calculator"
 	"github.com/dora-metrics-app/backend/internal/collector/gitlab"
 	"github.com/dora-metrics-app/backend/internal/collector/jira"
@@ -39,6 +40,7 @@ func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskCollectJira, h.HandleCollectJira)
 	mux.HandleFunc(TaskComputeMetricWindow, h.HandleComputeMetricWindow)
 	mux.HandleFunc(TaskSnapshotMonthly, h.HandleSnapshotMonthly)
+	mux.HandleFunc(TaskDispatchAlert, h.HandleDispatchAlert)
 }
 
 // ReconcileBackfillDays é a profundidade da varredura que o job noturno força
@@ -350,6 +352,23 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		return fmt.Errorf("load project: %w", err)
 	}
 
+	// Captura a classificação anterior ANTES de gravar a nova — usada pelo
+	// detector de alertas. Não falhamos a task se a leitura der erro: o pior
+	// caso é não disparar este alerta (idempotente na próxima compute).
+	var previousTier string
+	if prev, prevErr := q.GetLatestMetricWindow(ctx, queries.GetLatestMetricWindowParams{
+		TenantID:   project.TenantID,
+		ScopeKind:  "project",
+		ScopeID:    project.ID,
+		WindowDays: int32(payload.WindowDays),
+	}); prevErr == nil {
+		if prev.Classification != nil {
+			previousTier = *prev.Classification
+		}
+	} else if !errors.Is(prevErr, pgx.ErrNoRows) {
+		log.Warn().Err(prevErr).Msg("alerts: load previous metric_window")
+	}
+
 	since := time.Now().Add(-time.Duration(payload.WindowDays) * 24 * time.Hour)
 
 	count, err := q.CountSuccessfulProductionDeploymentsInWindow(ctx,
@@ -463,7 +482,92 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		Str("class", classification).
 		Msg("metric window updated")
 
+	h.fanOutAlertsForTierChange(ctx, q, project, payload.WindowDays, previousTier, classification)
+
 	return nil
+}
+
+// fanOutAlertsForTierChange compara a classificação anterior com a nova e,
+// se houve transição relevante, persiste alert_events em "pending" e enfileira
+// uma task dispatch:alert por evento. Erros são logados mas não propagam —
+// nenhum dos passos é crítico pro recálculo principal.
+func (h *Handlers) fanOutAlertsForTierChange(
+	ctx context.Context,
+	q *queries.Queries,
+	project queries.PlatformProject,
+	windowDays int,
+	previousTier, currentTier string,
+) {
+	if !alerts.IsChange(previousTier, currentTier) {
+		return
+	}
+
+	rules, err := q.FindMatchingAlertRules(ctx, queries.FindMatchingAlertRulesParams{
+		TenantID:   project.TenantID,
+		ScopeKind:  "project",
+		WindowDays: int32(windowDays),
+		ScopeID:    pgtype.UUID{Bytes: project.ID, Valid: true},
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("alerts: find matching rules")
+		return
+	}
+
+	for _, rule := range rules {
+		if !alerts.RuleMatchesChange(rule.Kind, previousTier, currentTier) {
+			continue
+		}
+
+		payload := map[string]any{
+			"rule_id":       rule.ID.String(),
+			"rule_name":     rule.Name,
+			"kind":          rule.Kind,
+			"scope_kind":    "project",
+			"scope_id":      project.ID.String(),
+			"project_path":  project.PathWithNamespace,
+			"window_days":   windowDays,
+			"previous_tier": previousTier,
+			"current_tier":  currentTier,
+		}
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			log.Error().Err(err).Msg("alerts: marshal payload")
+			continue
+		}
+
+		event, err := q.InsertAlertEvent(ctx, queries.InsertAlertEventParams{
+			RuleID:       rule.ID,
+			TenantID:     project.TenantID,
+			ScopeKind:    "project",
+			ScopeID:      project.ID,
+			PreviousTier: strPtr(previousTier),
+			CurrentTier:  currentTier,
+			Payload:      payloadBytes,
+		})
+		if err != nil {
+			log.Error().Err(err).Str("rule_id", rule.ID.String()).
+				Msg("alerts: insert event")
+			continue
+		}
+
+		task, err := NewDispatchAlertTask(event.ID)
+		if err != nil {
+			log.Error().Err(err).Msg("alerts: build dispatch task")
+			continue
+		}
+		if _, err := h.Asynq.EnqueueContext(ctx, task); err != nil {
+			log.Error().Err(err).Str("event_id", event.ID.String()).
+				Msg("alerts: enqueue dispatch")
+			continue
+		}
+
+		log.Info().
+			Str("rule_id", rule.ID.String()).
+			Str("event_id", event.ID.String()).
+			Str("previous_tier", previousTier).
+			Str("current_tier", currentTier).
+			Msg("alerts: tier change detected, dispatch enqueued")
+	}
 }
 
 // coerceFloat converte um interface{} vindo do sqlc (que pode ser float64,
