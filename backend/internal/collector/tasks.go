@@ -16,6 +16,7 @@ const (
 	TaskCollectGitlab        = "collect:gitlab:deployments"
 	TaskCollectJira          = "collect:jira:incidents"
 	TaskComputeMetricWindow  = "compute:metric_window"
+	TaskSnapshotMonthly      = "snapshot:monthly"
 )
 
 // Filas (declaradas no asynq.Config).

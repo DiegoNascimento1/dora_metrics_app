@@ -19,6 +19,9 @@ type Querier interface {
 	// decidir se devolve NULL na API).
 	ChangeFailureRateInWindow(ctx context.Context, arg ChangeFailureRateInWindowParams) (ChangeFailureRateInWindowRow, error)
 	CountDeploymentsByPersonInWindow(ctx context.Context, arg CountDeploymentsByPersonInWindowParams) (int64, error)
+	// Quantos meses na história desse scope foram classificados Elite.
+	// Drive da achievement "First Elite Month" (count >= 1).
+	CountEliteMonthsForScope(ctx context.Context, arg CountEliteMonthsForScopeParams) (int64, error)
 	// Quantos incidents foram causados por deploys que ESSA pessoa disparou,
 	// na janela. Aproximação per-person de CFR (denominador real é seus deploys).
 	CountIncidentsLinkedToPersonInWindow(ctx context.Context, arg CountIncidentsLinkedToPersonInWindowParams) (int64, error)
@@ -64,6 +67,9 @@ type Querier interface {
 	// Encontra o projeto pelo external_id assumindo source kind='gitlab'.
 	// Em multi-tenant com múltiplos GitLab e overlap de IDs, retorna o mais antigo.
 	GetGitLabProjectByExternalID(ctx context.Context, externalID string) (PlatformProject, error)
+	// Últimos 5 incidents resolvidos do projeto (via jira_project_keys),
+	// com o MTTR em segundos. Drive da achievement "Recovery Master".
+	GetLastIncidentsMTTRForProject(ctx context.Context, arg GetLastIncidentsMTTRForProjectParams) ([]GetLastIncidentsMTTRForProjectRow, error)
 	GetLatestMetricWindow(ctx context.Context, arg GetLatestMetricWindowParams) (MetricsMetricWindow, error)
 	GetPerson(ctx context.Context, id uuid.UUID) (PlatformPerson, error)
 	GetProductionEnvironmentIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
@@ -138,6 +144,7 @@ type Querier interface {
 	UpsertMergeRequest(ctx context.Context, arg UpsertMergeRequestParams) (PlatformMergeRequest, error)
 	// Insere uma nova versão da janela (não substitui histórico).
 	UpsertMetricWindow(ctx context.Context, arg UpsertMetricWindowParams) (MetricsMetricWindow, error)
+	UpsertMonthlySnapshot(ctx context.Context, arg UpsertMonthlySnapshotParams) (MetricsMetricMonthlySnapshot, error)
 	// Idempotente em (tenant_id, kind, external_username). Atualiza external_email
 	// e external_id no conflito; preserva person_id já vinculado.
 	UpsertPersonIdentity(ctx context.Context, arg UpsertPersonIdentityParams) (PlatformPersonIdentity, error)

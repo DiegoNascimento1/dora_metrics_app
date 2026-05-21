@@ -161,6 +161,17 @@ func buildScheduler(redisOpt asynq.RedisClientOpt) (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
+	// Snapshot mensal — 1º dia do mês 00:00 UTC. Captura o mês que acabou.
+	snapshotTask := asynq.NewTask(
+		collector.TaskSnapshotMonthly,
+		nil,
+		asynq.Queue(collector.QueueDefault),
+		asynq.MaxRetry(2),
+	)
+	if _, err := s.Register("0 0 1 * *", snapshotTask); err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 

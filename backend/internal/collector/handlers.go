@@ -38,6 +38,7 @@ func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskCollectGitlab, h.HandleCollectGitlab)
 	mux.HandleFunc(TaskCollectJira, h.HandleCollectJira)
 	mux.HandleFunc(TaskComputeMetricWindow, h.HandleComputeMetricWindow)
+	mux.HandleFunc(TaskSnapshotMonthly, h.HandleSnapshotMonthly)
 }
 
 // ReconcileBackfillDays é a profundidade da varredura que o job noturno força
@@ -753,6 +754,69 @@ func toInt32Ptr(p *int) *int32 {
 	}
 	v := int32(*p)
 	return &v
+}
+
+// HandleSnapshotMonthly congela a foto da janela 30d de CADA projeto ativo
+// em metrics.metric_monthly_snapshot. Idempotente — re-rodar no mesmo mês
+// sobrescreve. Cron previsto: `0 0 1 * *` (1º dia do mês 00:00 UTC,
+// capturando o mês que acabou).
+func (h *Handlers) HandleSnapshotMonthly(ctx context.Context, _ *asynq.Task) error {
+	q := queries.New(h.DB.Pool)
+
+	projects, err := q.ListActiveProjects(ctx)
+	if err != nil {
+		return fmt.Errorf("list active projects: %w", err)
+	}
+
+	// Mês a congelar = mês anterior ao corrente. Cron roda dia 1, então
+	// (hoje - 1 mês) é seguro pra ancorar no mês completo recém-encerrado.
+	month := time.Now().UTC().AddDate(0, -1, 0)
+	monthDate := pgtype.Date{
+		Time:  time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC),
+		Valid: true,
+	}
+
+	processed := 0
+	for _, p := range projects {
+		row, err := q.GetLatestMetricWindow(ctx, queries.GetLatestMetricWindowParams{
+			TenantID:   p.TenantID,
+			ScopeKind:  "project",
+			ScopeID:    p.ID,
+			WindowDays: 30,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			log.Error().Err(err).Str("project_id", p.ID.String()).
+				Msg("snapshot: load metric_window")
+			continue
+		}
+
+		_, err = q.UpsertMonthlySnapshot(ctx, queries.UpsertMonthlySnapshotParams{
+			TenantID:            p.TenantID,
+			ScopeKind:           "project",
+			ScopeID:             p.ID,
+			Month:               monthDate,
+			DeploymentFrequency: row.DeploymentFrequency,
+			LeadTimeMedianS:     row.LeadTimeMedianS,
+			ChangeFailureRate:   row.ChangeFailureRate,
+			MttrMeanS:           row.MttrMeanS,
+			Classification:      row.Classification,
+		})
+		if err != nil {
+			log.Error().Err(err).Str("project_id", p.ID.String()).
+				Msg("snapshot: upsert")
+			continue
+		}
+		processed++
+	}
+
+	log.Info().
+		Int("projects", processed).
+		Str("month", monthDate.Time.Format("2006-01")).
+		Msg("monthly snapshot complete")
+	return nil
 }
 
 // resolveToken devolve a credencial efetiva para uma source_instance.
