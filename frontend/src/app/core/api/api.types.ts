@@ -93,3 +93,19 @@ export interface PersonMetrics {
   leadTimeSampleSize: number;
   incidentsLinked: number;
 }
+
+export interface Achievement {
+  code: string;
+  title: string;
+  description: string;
+  icon: string;        // Material Symbol Outlined name
+  unlockedAt: string;  // ISO date
+}
+
+export interface ProjectAchievements {
+  projectId: string;
+  windowDays: number;
+  daysSinceLastIncident: number;   // -1 = sem incidents registrados
+  currentClassification: Classification;
+  achievements: Achievement[];
+}

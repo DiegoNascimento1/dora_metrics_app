@@ -12,6 +12,7 @@ import {
   PersonMetrics,
   PersonWithIdentities,
   Project,
+  ProjectAchievements,
   TimeseriesResponse,
 } from './api.types';
 
@@ -51,6 +52,16 @@ export class ApiClient {
   ): Observable<Deployment[]> {
     return this.http.get<Deployment[]>(
       `${API_BASE}/projects/${projectId}/deployments`,
+      { params: { window } },
+    );
+  }
+
+  getProjectAchievements(
+    projectId: string,
+    window: '7d' | '30d' | '90d' = '30d',
+  ): Observable<ProjectAchievements> {
+    return this.http.get<ProjectAchievements>(
+      `${API_BASE}/projects/${projectId}/achievements`,
       { params: { window } },
     );
   }

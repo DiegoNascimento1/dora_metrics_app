@@ -21,10 +21,12 @@ import {
   Deployment,
   DoraMetrics,
   Project,
+  ProjectAchievements,
   TimeseriesPoint,
 } from '../../core/api/api.types';
 import { TimeseriesChartComponent } from './timeseries-chart.component';
 import { DeploymentsTableComponent } from './deployments-table.component';
+import { AchievementsCardComponent } from './achievements-card.component';
 
 interface MetricTile {
   label: string;
@@ -49,6 +51,7 @@ type Window = '7d' | '30d' | '90d';
     MatIconModule,
     TimeseriesChartComponent,
     DeploymentsTableComponent,
+    AchievementsCardComponent,
   ],
   template: `
     <h1>DORA — visão geral</h1>
@@ -112,6 +115,8 @@ docker compose run --rm cli project add \\
             </mat-card>
           }
         </div>
+
+        <app-achievements-card [data]="achievements()" />
 
         <mat-card appearance="outlined" class="chart-card">
           <mat-card-header>
@@ -196,6 +201,7 @@ export class DashboardComponent {
   metrics = signal<DoraMetrics | null>(null);
   points = signal<TimeseriesPoint[]>([]);
   deployments = signal<Deployment[]>([]);
+  achievements = signal<ProjectAchievements | null>(null);
 
   selectedProjectId: string | null = null;
   selectedWindow: Window = '30d';
@@ -273,12 +279,16 @@ export class DashboardComponent {
       deployments: this.api
         .listProjectDeployments(this.selectedProjectId, this.selectedWindow)
         .pipe(catchError(() => of([] as Deployment[]))),
+      achievements: this.api
+        .getProjectAchievements(this.selectedProjectId, this.selectedWindow)
+        .pipe(catchError(() => of<ProjectAchievements | null>(null))),
     })
       .pipe(finalize(() => this.loading.set(false)))
-      .subscribe(({ metrics, timeseries, deployments }) => {
+      .subscribe(({ metrics, timeseries, deployments, achievements }) => {
         this.metrics.set(metrics);
         this.points.set(timeseries.points ?? []);
         this.deployments.set(deployments);
+        this.achievements.set(achievements);
       });
   }
 
