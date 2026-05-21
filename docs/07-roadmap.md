@@ -149,8 +149,11 @@ Não pertencem a uma fase específica; evoluem em paralelo.
 - [x] Tema **claro + escuro** com persistência — `ThemeService` reativo (signal + `prefers-color-scheme`) + toggle na toolbar + `localStorage`. Modos: `light` / `dark` / `system` (default). Chart e Material form-fields cobertos no dark
 - [x] WCAG AA: paleta calibrada (Elite verde escuro sobre branco; chip Medium âmbar usa texto preto para contraste). Foco visível via `:focus-visible` global com outline brand 2px e offset 2-3px; só mostra em keyboard nav (não em mouse click)
 - [x] Iconografia: Material Symbols Outlined (variable) carregado globalmente
-- [ ] Empty states, loading skeletons e error states desenhados (mat-spinner básico hoje; falta polish)
-- [ ] Logo + favicon + open graph
+- [x] Loading skeletons compartilhados (`<app-skeleton>` com 5 variantes + shimmer respeitando `prefers-reduced-motion`); aplicados em dashboard, projects, people, settings
+- [x] Empty states desenhados (`<app-empty-state>` com ícone-em-círculo + título + descrição + slot CTA); 6 ocorrências nas páginas
+- [ ] Error states desenhados (ainda usa snackbar / card simples — falta um `<app-error-state>`)
+- [x] Logo SVG + favicon + theme-color + description meta (4 barras crescentes representando as 4 métricas DORA + dot Elite no topo)
+- [ ] Open graph (preview de link compartilhado)
 
 #### Camada de gamificação (engajamento)
 
