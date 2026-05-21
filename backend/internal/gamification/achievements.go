@@ -20,6 +20,9 @@ type ProjectStats struct {
 	DaysSinceLastIncident int    // -1 quando o projeto nunca teve incident
 	CurrentClassification string // "elite" | "high" | "medium" | "low" | "insufficient_data"
 	SampleSize            int    // n de deploys na janela
+	EliteMonthsCount      int    // n de meses históricos com classificação Elite (drive de "First Elite Month")
+	LeadTimeMedianSeconds *int64 // mediana atual em segundos (drive de "Speed Demon")
+	LastIncidentsMTTR     []int64 // MTTR em segundos dos últimos N incidents resolvidos (drive de "Recovery Master")
 }
 
 // EvaluateAchievements aplica as regras vigentes e devolve as conquistas
@@ -69,6 +72,53 @@ func EvaluateAchievements(s ProjectStats, nowISO string) []Achievement {
 			Icon:        "workspace_premium",
 			UnlockedAt:  nowISO,
 		})
+	}
+
+	// 🚀 First Elite Month — primeiro mês inteiro classificado Elite na
+	// história do projeto (snapshot mensal congelado em metric_monthly_snapshot).
+	if s.EliteMonthsCount >= 1 {
+		out = append(out, Achievement{
+			Code:        "first_elite_month",
+			Title:       "First Elite Month",
+			Description: "Pelo menos um mês inteiro com classificação Elite",
+			Icon:        "rocket_launch",
+			UnlockedAt:  nowISO,
+		})
+	}
+
+	// ⚡ Speed Demon — Lead Time mediano < 1h com amostra real (>= 4 deploys
+	// na janela). É um proxy de "consistentemente rápido" enquanto não temos
+	// histórico semanal pra validar "4 semanas consecutivas".
+	if s.LeadTimeMedianSeconds != nil && *s.LeadTimeMedianSeconds < 3600 && s.SampleSize >= 4 {
+		out = append(out, Achievement{
+			Code:        "speed_demon",
+			Title:       "Speed Demon",
+			Description: "Lead Time mediano < 1h com >= 4 deploys na janela",
+			Icon:        "bolt",
+			UnlockedAt:  nowISO,
+		})
+	}
+
+	// 🔁 Recovery Master — últimos 5 incidents resolvidos todos com MTTR < 1h.
+	// Precisa de 5 incidents reais (não desbloqueia em projeto que mal viu
+	// incidents — celebra recuperação repetida, não ausência de problemas).
+	if len(s.LastIncidentsMTTR) >= 5 {
+		allFast := true
+		for _, mttr := range s.LastIncidentsMTTR {
+			if mttr >= 3600 {
+				allFast = false
+				break
+			}
+		}
+		if allFast {
+			out = append(out, Achievement{
+				Code:        "recovery_master",
+				Title:       "Recovery Master",
+				Description: "Últimos 5 incidents resolvidos com MTTR < 1h",
+				Icon:        "autorenew",
+				UnlockedAt:  nowISO,
+			})
+		}
 	}
 
 	return out

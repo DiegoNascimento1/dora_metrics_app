@@ -52,6 +52,33 @@ func (s *Server) handleProjectAchievements() http.HandlerFunc {
 		}
 		days := int(coerceInt(daysRaw))
 
+		eliteMonths, err := q.CountEliteMonthsForScope(r.Context(),
+			queries.CountEliteMonthsForScopeParams{
+				TenantID:  project.TenantID,
+				ScopeKind: "project",
+				ScopeID:   project.ID,
+			},
+		)
+		if err != nil {
+			log.Warn().Err(err).Msg("count elite months")
+			eliteMonths = 0
+		}
+
+		lastIncRows, err := q.GetLastIncidentsMTTRForProject(r.Context(),
+			queries.GetLastIncidentsMTTRForProjectParams{
+				ProjectID: project.ID,
+				LimitN:    5,
+			},
+		)
+		if err != nil {
+			log.Warn().Err(err).Msg("last incidents mttr")
+			lastIncRows = nil
+		}
+		lastMTTR := make([]int64, 0, len(lastIncRows))
+		for _, row := range lastIncRows {
+			lastMTTR = append(lastMTTR, row.MttrSeconds)
+		}
+
 		mwRow, err := q.GetLatestMetricWindow(r.Context(), queries.GetLatestMetricWindowParams{
 			TenantID:   project.TenantID,
 			ScopeKind:  "project",
@@ -60,11 +87,13 @@ func (s *Server) handleProjectAchievements() http.HandlerFunc {
 		})
 		classification := "insufficient_data"
 		sample := 0
+		var ltMedian *int64
 		if err == nil {
 			if mwRow.Classification != nil {
 				classification = *mwRow.Classification
 			}
 			sample = int(mwRow.SampleSize)
+			ltMedian = mwRow.LeadTimeMedianS
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			log.Error().Err(err).Msg("get latest metric window for achievements")
 		}
@@ -74,6 +103,9 @@ func (s *Server) handleProjectAchievements() http.HandlerFunc {
 				DaysSinceLastIncident: days,
 				CurrentClassification: classification,
 				SampleSize:            sample,
+				EliteMonthsCount:      int(eliteMonths),
+				LeadTimeMedianSeconds: ltMedian,
+				LastIncidentsMTTR:     lastMTTR,
 			},
 			time.Now().UTC().Format("2006-01-02"),
 		)

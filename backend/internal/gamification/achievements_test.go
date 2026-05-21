@@ -112,3 +112,98 @@ func TestEvaluateAchievements_StreakStopsAtHighest(t *testing.T) {
 		t.Errorf("expected exactly 1 streak achievement, got %d", streakCount)
 	}
 }
+
+// ---- batch 2 ----
+
+func TestEvaluateAchievements_FirstEliteMonth(t *testing.T) {
+	out := EvaluateAchievements(ProjectStats{
+		DaysSinceLastIncident: 5,
+		CurrentClassification: "high",
+		SampleSize:            5,
+		EliteMonthsCount:      1,
+	}, "2026-05-20")
+	if !hasCode(out, "first_elite_month") {
+		t.Error("EliteMonthsCount=1 should unlock first_elite_month")
+	}
+}
+
+func TestEvaluateAchievements_FirstEliteMonth_NotYet(t *testing.T) {
+	out := EvaluateAchievements(ProjectStats{
+		CurrentClassification: "elite",
+		SampleSize:            10,
+		EliteMonthsCount:      0,
+	}, "2026-05-20")
+	if hasCode(out, "first_elite_month") {
+		t.Error("EliteMonthsCount=0 should NOT unlock first_elite_month")
+	}
+}
+
+func TestEvaluateAchievements_SpeedDemon(t *testing.T) {
+	lt := int64(1800) // 30min
+	out := EvaluateAchievements(ProjectStats{
+		CurrentClassification: "high",
+		SampleSize:            5,
+		LeadTimeMedianSeconds: &lt,
+	}, "2026-05-20")
+	if !hasCode(out, "speed_demon") {
+		t.Error("LT < 1h with sample >= 4 should unlock speed_demon")
+	}
+}
+
+func TestEvaluateAchievements_SpeedDemon_LowSample(t *testing.T) {
+	lt := int64(1800)
+	out := EvaluateAchievements(ProjectStats{
+		SampleSize:            3, // só 3 deploys
+		LeadTimeMedianSeconds: &lt,
+	}, "2026-05-20")
+	if hasCode(out, "speed_demon") {
+		t.Error("speed_demon requires sample >= 4 even with fast LT")
+	}
+}
+
+func TestEvaluateAchievements_SpeedDemon_TooSlow(t *testing.T) {
+	lt := int64(4000) // > 1h
+	out := EvaluateAchievements(ProjectStats{
+		SampleSize:            10,
+		LeadTimeMedianSeconds: &lt,
+	}, "2026-05-20")
+	if hasCode(out, "speed_demon") {
+		t.Error("LT >= 1h should NOT unlock speed_demon")
+	}
+}
+
+func TestEvaluateAchievements_RecoveryMaster(t *testing.T) {
+	out := EvaluateAchievements(ProjectStats{
+		LastIncidentsMTTR: []int64{1200, 800, 2400, 600, 1800}, // todos < 1h
+	}, "2026-05-20")
+	if !hasCode(out, "recovery_master") {
+		t.Error("5 incidents all < 1h MTTR should unlock recovery_master")
+	}
+}
+
+func TestEvaluateAchievements_RecoveryMaster_OneSlow(t *testing.T) {
+	out := EvaluateAchievements(ProjectStats{
+		LastIncidentsMTTR: []int64{1200, 800, 7200 /* 2h */, 600, 1800},
+	}, "2026-05-20")
+	if hasCode(out, "recovery_master") {
+		t.Error("one incident >= 1h should block recovery_master")
+	}
+}
+
+func TestEvaluateAchievements_RecoveryMaster_TooFew(t *testing.T) {
+	out := EvaluateAchievements(ProjectStats{
+		LastIncidentsMTTR: []int64{1200, 800, 600}, // só 3 incidents
+	}, "2026-05-20")
+	if hasCode(out, "recovery_master") {
+		t.Error("< 5 incidents should NOT unlock recovery_master")
+	}
+}
+
+func hasCode(achievements []Achievement, code string) bool {
+	for _, a := range achievements {
+		if a.Code == code {
+			return true
+		}
+	}
+	return false
+}
