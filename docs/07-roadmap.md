@@ -107,7 +107,7 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 - [ ] Webhook out → Teams, email
 - [ ] Suporte a múltiplas `source_instance` simultâneas (já está no schema; falta exercitar)
 - [ ] Suporte a múltiplos tenants reais (isolamento, billing-like — mesmo que internamente)
-- [ ] Histórico mensal congelado (`metric_monthly_snapshot`) — tabela existe, falta o cron
+- [x] Histórico mensal congelado (`metric_monthly_snapshot`) — task `snapshot:monthly` agendada `0 0 1 * *` (1º dia do mês 00:00 UTC) lê o último `metric_window` 30d de cada projeto ativo e congela em `metric_monthly_snapshot` com mês = mês anterior. Idempotente
 - [ ] Exportação CSV/JSON
 
 **Critério de saída:** time recebe alerta no Teams quando CFR ultrapassa limiar, com ruído controlado (regra de "mudança de estado", não disparar todo dia).
@@ -168,11 +168,12 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
     - 🛡️ *100 Green Days* — 100+ dias sem incident
     - 🏆 *Elite Tier* — classificação combinada = elite na janela atual
     Tiers de streak são mutuamente exclusivos (só o mais alto fica visível).
-- [ ] **Achievements** (próxima batch):
-    - 🚀 *First Elite Month* — primeiro mês inteiro classificação Elite combinada
-    - ⚡ *Speed Demon* — Lead Time mediano < 1h por 4 semanas consecutivas
-    - 🔁 *Recovery Master* — MTTR < 1h em 5 incidents consecutivos
-    - 📈 *Most Improved* — maior salto de tier no trimestre
+- [x] **Achievements** (segunda batch):
+    - 🚀 *First Elite Month* — `EliteMonthsCount >= 1` lendo de `metrics.metric_monthly_snapshot`
+    - ⚡ *Speed Demon* — Lead Time mediano < 1h com `sample_size >= 4` (proxy de "consistentemente rápido" enquanto não temos histórico semanal)
+    - 🔁 *Recovery Master* — últimos 5 incidents resolvidos todos com MTTR < 1h (requer 5 reais — não desbloqueia em projeto sem dados)
+- [ ] **Achievements** (próxima batch — espera ≥2 meses de cron):
+    - 📈 *Most Improved* — maior salto de tier no trimestre (precisa de histórico mensal)
 - [x] **Leaderboard entre times** — rota `/leaderboard` com ranking por tier (Elite/High/Medium/Low) + tiebreaker por DF + alfabético. Badge "Liderando" no #1 (workspace_premium), "Em crescimento" no último (trending_up); copy no header reforça que é celebração, não ranking punitivo. Frontend-only por enquanto (forkJoin de N `getTeamMetrics`); endpoint dedicado `/leaderboard` quando time-count crescer
 - [ ] **Progress bars** mostrando "quão perto" o time está do próximo tier (ex: "+0.12 deploys/dia para Elite")
 - [ ] **Weekly digest** — card semanal: "essa semana 12 deploys, 0 incidents, +1 tier em LT" — formato compartilhável (PNG/Slack-friendly)
