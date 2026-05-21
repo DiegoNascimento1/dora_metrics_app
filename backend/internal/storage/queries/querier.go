@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	AssignProjectToTeam(ctx context.Context, arg AssignProjectToTeamParams) (PlatformProject, error)
 	// (deploys com >= 1 incident vinculado) / (deploys de produção bem-sucedidos)
 	// na janela. Retorna 0 quando não há amostra (caller usa sample_size para
 	// decidir se devolve NULL na API).
@@ -24,6 +25,7 @@ type Querier interface {
 	CreatePerson(ctx context.Context, arg CreatePersonParams) (PlatformPerson, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
 	CreateSourceInstance(ctx context.Context, arg CreateSourceInstanceParams) (PlatformSourceInstance, error)
+	CreateTeam(ctx context.Context, arg CreateTeamParams) (PlatformTeam, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (PlatformTenant, error)
 	// Dias completos desde o último incident production-impactante do projeto
 	// (via mapping jira_project_keys). Retorna -1 quando o projeto nunca teve
@@ -31,6 +33,7 @@ type Querier interface {
 	// O caller trata -1 como "sem incidents — streak infinito ainda não é mérito".
 	DaysSinceLastIncidentForProject(ctx context.Context, projectID uuid.UUID) (interface{}, error)
 	DeleteSourceInstance(ctx context.Context, id uuid.UUID) error
+	DeleteTeam(ctx context.Context, id uuid.UUID) error
 	// Série temporal de deployments de produção bem-sucedidos por dia (UTC).
 	// Drive da curva de Deployment Frequency.
 	DeploymentsPerDayInWindow(ctx context.Context, arg DeploymentsPerDayInWindowParams) ([]DeploymentsPerDayInWindowRow, error)
@@ -57,6 +60,7 @@ type Querier interface {
 	GetProject(ctx context.Context, id uuid.UUID) (PlatformProject, error)
 	GetProjectByExternalID(ctx context.Context, arg GetProjectByExternalIDParams) (PlatformProject, error)
 	GetSourceInstance(ctx context.Context, id uuid.UUID) (PlatformSourceInstance, error)
+	GetTeam(ctx context.Context, id uuid.UUID) (PlatformTeam, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (PlatformTenant, error)
 	GetTenantBySlug(ctx context.Context, slug string) (PlatformTenant, error)
 	InsertRawEvent(ctx context.Context, arg InsertRawEventParams) (RawRawEvent, error)
@@ -92,7 +96,9 @@ type Querier interface {
 	// "clique no tile/ponto → ver os deploys que compõem".
 	ListProductionDeploymentsInWindow(ctx context.Context, arg ListProductionDeploymentsInWindowParams) ([]ListProductionDeploymentsInWindowRow, error)
 	ListProjects(ctx context.Context) ([]PlatformProject, error)
+	ListProjectsByTeam(ctx context.Context, teamID pgtype.UUID) ([]PlatformProject, error)
 	ListSourceInstancesByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformSourceInstance, error)
+	ListTeamsByTenant(ctx context.Context, tenantID uuid.UUID) ([]PlatformTeam, error)
 	ListTenants(ctx context.Context) ([]PlatformTenant, error)
 	ListUnlinkedIdentities(ctx context.Context, tenantID uuid.UUID) ([]PlatformPersonIdentity, error)
 	// Fila do processamento incremental — usa o índice parcial
@@ -110,6 +116,7 @@ type Querier interface {
 	UnlinkIdentity(ctx context.Context, id uuid.UUID) error
 	UpdateProjectLastSynced(ctx context.Context, arg UpdateProjectLastSyncedParams) error
 	UpdateSourceInstanceSecret(ctx context.Context, arg UpdateSourceInstanceSecretParams) (PlatformSourceInstance, error)
+	UpdateTeam(ctx context.Context, arg UpdateTeamParams) (PlatformTeam, error)
 	UpsertClassificationThreshold(ctx context.Context, arg UpsertClassificationThresholdParams) (PlatformClassificationThreshold, error)
 	UpsertDeployment(ctx context.Context, arg UpsertDeploymentParams) (PlatformDeployment, error)
 	UpsertDeploymentIncidentLink(ctx context.Context, arg UpsertDeploymentIncidentLinkParams) error

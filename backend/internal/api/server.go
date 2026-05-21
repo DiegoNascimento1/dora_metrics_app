@@ -70,6 +70,13 @@ func (s *Server) routes() {
 		r.Post("/source-instances", s.handleCreateSourceInstance())
 		r.Delete("/source-instances/{sourceInstanceId}", s.handleDeleteSourceInstance())
 		r.Post("/source-instances/test", s.handleTestConnection())
+
+		r.Get("/teams", s.handleListTeams())
+		r.Post("/teams", s.handleCreateTeam())
+		r.Patch("/teams/{teamId}", s.handleUpdateTeam())
+		r.Delete("/teams/{teamId}", s.handleDeleteTeam())
+		r.Post("/teams/{teamId}/projects", s.handleAssignProjectToTeam())
+		r.Post("/projects/{projectId}/unassign-team", s.handleUnassignProjectFromTeam())
 	})
 
 	r.Route("/webhooks", func(r chi.Router) {

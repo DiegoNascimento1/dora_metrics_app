@@ -192,6 +192,11 @@ type PlatformTeam struct {
 	TenantID uuid.UUID `json:"tenant_id"`
 	Slug     string    `json:"slug"`
 	Name     string    `json:"name"`
+	// Hex CSS color, ex: #2563eb. Usado em chips/cards no dashboard.
+	Color *string `json:"color"`
+	// Emoji curto (1-2 caracteres) usado como mini-avatar.
+	Emoji     *string   `json:"emoji"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type PlatformTenant struct {

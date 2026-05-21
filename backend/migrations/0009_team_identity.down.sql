@@ -1,0 +1,4 @@
+ALTER TABLE platform.team
+  DROP COLUMN IF EXISTS created_at,
+  DROP COLUMN IF EXISTS emoji,
+  DROP COLUMN IF EXISTS color;
