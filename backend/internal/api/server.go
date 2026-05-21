@@ -76,6 +76,8 @@ func (s *Server) routes() {
 		r.Patch("/teams/{teamId}", s.handleUpdateTeam())
 		r.Delete("/teams/{teamId}", s.handleDeleteTeam())
 		r.Post("/teams/{teamId}/projects", s.handleAssignProjectToTeam())
+		r.Get("/teams/{teamId}/metrics", s.handleTeamMetrics())
+		r.Get("/teams/{teamId}/timeseries", s.handleTeamTimeseries())
 		r.Post("/projects/{projectId}/unassign-team", s.handleUnassignProjectFromTeam())
 	})
 

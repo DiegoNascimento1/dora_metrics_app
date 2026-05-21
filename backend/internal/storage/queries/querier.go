@@ -13,6 +13,7 @@ import (
 
 type Querier interface {
 	AssignProjectToTeam(ctx context.Context, arg AssignProjectToTeamParams) (PlatformProject, error)
+	ChangeFailureRateForTeamInWindow(ctx context.Context, arg ChangeFailureRateForTeamInWindowParams) (ChangeFailureRateForTeamInWindowRow, error)
 	// (deploys com >= 1 incident vinculado) / (deploys de produção bem-sucedidos)
 	// na janela. Retorna 0 quando não há amostra (caller usa sample_size para
 	// decidir se devolve NULL na API).
@@ -21,6 +22,14 @@ type Querier interface {
 	// Quantos incidents foram causados por deploys que ESSA pessoa disparou,
 	// na janela. Aproximação per-person de CFR (denominador real é seus deploys).
 	CountIncidentsLinkedToPersonInWindow(ctx context.Context, arg CountIncidentsLinkedToPersonInWindowParams) (int64, error)
+	// Agregações DORA por time. Todas as queries usam a mesma estratégia:
+	// expande os projetos do time via subselect em platform.project.team_id e
+	// aplica a mesma lógica da versão "by project".
+	//
+	// Convenção: COALESCE em saídas opcionais (PERCENTILE_CONT/AVG/divisão por 0)
+	// pra sqlc gerar tipo concreto. Caller decide via sample_size se o valor
+	// tem significado.
+	CountSuccessfulProductionDeploymentsForTeamInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsForTeamInWindowParams) (int64, error)
 	CountSuccessfulProductionDeploymentsInWindow(ctx context.Context, arg CountSuccessfulProductionDeploymentsInWindowParams) (int64, error)
 	CreatePerson(ctx context.Context, arg CreatePersonParams) (PlatformPerson, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (PlatformProject, error)
@@ -34,6 +43,7 @@ type Querier interface {
 	DaysSinceLastIncidentForProject(ctx context.Context, projectID uuid.UUID) (interface{}, error)
 	DeleteSourceInstance(ctx context.Context, id uuid.UUID) error
 	DeleteTeam(ctx context.Context, id uuid.UUID) error
+	DeploymentsPerDayForTeamInWindow(ctx context.Context, arg DeploymentsPerDayForTeamInWindowParams) ([]DeploymentsPerDayForTeamInWindowRow, error)
 	// Série temporal de deployments de produção bem-sucedidos por dia (UTC).
 	// Drive da curva de Deployment Frequency.
 	DeploymentsPerDayInWindow(ctx context.Context, arg DeploymentsPerDayInWindowParams) ([]DeploymentsPerDayInWindowRow, error)
@@ -67,6 +77,7 @@ type Querier interface {
 	// Lead Time mediano dos MRs autorados pela pessoa cujos deployments de
 	// produção bem-sucedidos vinculados caem na janela.
 	LeadTimeMedianByPersonInWindow(ctx context.Context, arg LeadTimeMedianByPersonInWindowParams) (LeadTimeMedianByPersonInWindowRow, error)
+	LeadTimeMedianForTeamInWindow(ctx context.Context, arg LeadTimeMedianForTeamInWindowParams) (LeadTimeMedianForTeamInWindowRow, error)
 	// Mediana de (deploy.finished_at - mr.first_commit_at) para os MRs
 	// atribuídos a deployments de produção bem-sucedidos na janela.
 	// COALESCE para 0 quando sample_size = 0 (PERCENTILE_CONT retorna NULL nesse caso).
@@ -104,6 +115,7 @@ type Querier interface {
 	// Fila do processamento incremental — usa o índice parcial
 	// raw_event_pending_idx (processed_at IS NULL).
 	ListUnprocessedRawEvents(ctx context.Context, batchSize int32) ([]RawRawEvent, error)
+	MTTRMeanSecondsForTeamInWindow(ctx context.Context, arg MTTRMeanSecondsForTeamInWindowParams) (MTTRMeanSecondsForTeamInWindowRow, error)
 	// Média (segundos) de (resolved_at - created_at) para incidents do projeto
 	// resolvidos na janela. NULL quando não houver amostra; caller checa sample.
 	MTTRMeanSecondsInWindow(ctx context.Context, arg MTTRMeanSecondsInWindowParams) (MTTRMeanSecondsInWindowRow, error)
