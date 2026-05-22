@@ -26,6 +26,10 @@ backend/coverage.html
 backend/*.test
 backend/dist/
 backend/vendor/
+backend/api
+backend/worker
+backend/cli
+backend/mcp-server
 
 # Node / Angular
 frontend/node_modules/

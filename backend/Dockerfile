@@ -21,7 +21,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o /out/worker ./cmd/worker && \
     CGO_ENABLED=0 GOOS=linux go build \
       -ldflags='-s -w -extldflags "-static"' \
-      -o /out/cli ./cmd/cli
+      -o /out/cli ./cmd/cli && \
+    CGO_ENABLED=0 GOOS=linux go build \
+      -ldflags='-s -w -extldflags "-static"' \
+      -o /out/mcp-server ./cmd/mcp-server
 
 # ---------- API runtime ----------
 FROM gcr.io/distroless/static-debian12:nonroot AS api
@@ -46,3 +49,11 @@ WORKDIR /app
 COPY --from=builder /out/cli /app/cli
 USER nonroot:nonroot
 ENTRYPOINT ["/app/cli"]
+
+# ---------- MCP server runtime ----------
+FROM gcr.io/distroless/static-debian12:nonroot AS mcp-server
+WORKDIR /app
+COPY --from=builder /out/mcp-server /app/mcp-server
+USER nonroot:nonroot
+EXPOSE 8090
+ENTRYPOINT ["/app/mcp-server"]

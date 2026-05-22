@@ -97,6 +97,27 @@ services:
       - "4200:80"
     profiles: ["full"]
 
+  # Servidor MCP próprio (Fase 5). Expõe getDoraMetrics, getDeployments,
+  # compareTeams, explainTrend para LLMs/agentes via JSON-RPC sobre HTTP.
+  # Define MCP_SERVER_TOKEN no .env (ou MCP_ALLOW_INSECURE=true em dev).
+  mcp-server:
+    build:
+      context: ./backend
+      target: mcp-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      MCP_SERVER_ADDR: ":8090"
+      MCP_ALLOW_INSECURE: "true"
+    ports:
+      - "8090:8090"
+    profiles: ["full", "mcp"]
+
   # CLI administrativa. Não roda automaticamente; usar:
   #   docker compose run --rm cli tenant add --slug acme --name "ACME Corp"
   cli:
