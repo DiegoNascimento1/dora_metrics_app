@@ -80,6 +80,17 @@ func (h *Handlers) HandleDispatchAlert(ctx context.Context, task *asynq.Task) er
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "dora-metrics-app/alerts")
 
+	// Adapta body/headers para PagerDuty Events v2 ou Opsgenie Alerts
+	// quando a URL apontar pra esses destinos. Genérico (Slack/Teams)
+	// preserva o body original.
+	if err := adaptRequest(req, event, rule); err != nil {
+		_ = q.MarkAlertEventFailed(ctx, queries.MarkAlertEventFailedParams{
+			ID:        event.ID,
+			LastError: strPtr(err.Error()),
+		})
+		return fmt.Errorf("adapt request: %w (%w)", err, asynq.SkipRetry)
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		_ = q.MarkAlertEventFailed(ctx, queries.MarkAlertEventFailedParams{
