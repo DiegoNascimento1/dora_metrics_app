@@ -461,6 +461,113 @@ func TestSearchIssues_InvalidJSON(t *testing.T) {
 	}
 }
 
+// SearchUsers — happy path: parsing + filtragem active/atlassian.
+func TestSearchUsers_FiltersActiveAtlassianOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/api/3/users/search" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("query") != "alice" {
+			t.Errorf("query = %s, want alice", r.URL.Query().Get("query"))
+		}
+		_, _ = w.Write([]byte(`[
+			{"accountId":"557:abc","accountType":"atlassian","displayName":"Alice","emailAddress":"alice@acme.com","active":true},
+			{"accountId":"557:bot","accountType":"app","displayName":"Bot","emailAddress":"bot@acme.com","active":true},
+			{"accountId":"557:old","accountType":"atlassian","displayName":"Old","emailAddress":"old@acme.com","active":false}
+		]`))
+	}))
+	defer srv.Close()
+
+	s := NewRESTSource(srv.URL, "u", "t")
+	users, err := s.SearchUsers(context.Background(), "alice", 0)
+	if err != nil {
+		t.Fatalf("SearchUsers: %v", err)
+	}
+	if len(users) != 1 {
+		t.Fatalf("got %d users, want 1 (active atlassian)", len(users))
+	}
+	if users[0].DisplayName != "Alice" {
+		t.Errorf("user = %+v", users[0])
+	}
+}
+
+// SearchUsers — paginação por startAt/maxResults, para quando página
+// vem com len < pageSize.
+func TestSearchUsers_PaginatesByStartAt(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		startAt := r.URL.Query().Get("startAt")
+		switch n {
+		case 1:
+			if startAt != "0" {
+				t.Errorf("page 1 startAt = %s, want 0", startAt)
+			}
+			// devolve 100 → pede próxima.
+			items := make([]string, 100)
+			for i := range items {
+				items[i] = fmt.Sprintf(`{"accountId":"a%d","accountType":"atlassian","displayName":"u%d","active":true}`, i, i)
+			}
+			_, _ = w.Write([]byte("[" + strings.Join(items, ",") + "]"))
+		case 2:
+			if startAt != "100" {
+				t.Errorf("page 2 startAt = %s, want 100", startAt)
+			}
+			_, _ = w.Write([]byte(`[{"accountId":"a101","accountType":"atlassian","displayName":"u101","active":true}]`))
+		default:
+			t.Errorf("unexpected page %d", n)
+		}
+	}))
+	defer srv.Close()
+
+	s := NewRESTSource(srv.URL, "u", "t")
+	users, err := s.SearchUsers(context.Background(), "", 0)
+	if err != nil {
+		t.Fatalf("SearchUsers: %v", err)
+	}
+	if len(users) != 101 {
+		t.Errorf("got %d, want 101", len(users))
+	}
+}
+
+// SearchUsers — 401 vira APIError com status preservado.
+func TestSearchUsers_401(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"errorMessages":["bad token"]}`))
+	}))
+	defer srv.Close()
+	s := NewRESTSource(srv.URL, "u", "bad")
+	_, err := s.SearchUsers(context.Background(), "", 0)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T (%v)", err, err)
+	}
+	if apiErr.StatusCode != 401 {
+		t.Errorf("status = %d", apiErr.StatusCode)
+	}
+}
+
+// SearchUsers — limit corta a iteração.
+func TestSearchUsers_RespectsLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		items := make([]string, 100)
+		for i := range items {
+			items[i] = fmt.Sprintf(`{"accountId":"a%d","accountType":"atlassian","displayName":"u%d","active":true}`, i, i)
+		}
+		_, _ = w.Write([]byte("[" + strings.Join(items, ",") + "]"))
+	}))
+	defer srv.Close()
+	s := NewRESTSource(srv.URL, "u", "t")
+	users, err := s.SearchUsers(context.Background(), "", 5)
+	if err != nil {
+		t.Fatalf("SearchUsers: %v", err)
+	}
+	if len(users) != 5 {
+		t.Errorf("got %d, want exactly 5", len(users))
+	}
+}
+
 // MCPSource — confirma Name() correto e que falha cai pro fallback REST
 // quando configurado.
 func TestMCPSource_NameAndFallback(t *testing.T) {

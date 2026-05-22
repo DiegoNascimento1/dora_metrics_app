@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -303,6 +305,88 @@ func parseJiraTime(s string) (time.Time, error) {
 		return t, nil
 	}
 	return time.Parse(time.RFC3339, s)
+}
+
+// User é a projeção de um Jira Cloud user para alimentar
+// `platform.person_identity` (kind=jira). Apenas os campos que casam com
+// a heurística do `internal/identities`: accountId (external_id),
+// displayName, emailAddress.
+type User struct {
+	AccountID    string `json:"accountId"`
+	AccountType  string `json:"accountType"` // "atlassian" | "app" | "customer"
+	DisplayName  string `json:"displayName"`
+	EmailAddress string `json:"emailAddress"`
+	Active       bool   `json:"active"`
+}
+
+// SearchUsers chama GET /rest/api/3/users/search com pagination via
+// startAt + maxResults. Devolve apenas usuários `accountType=atlassian`
+// e `active=true` (filtra fora bots e contas desativadas) — Jira não
+// suporta filtro server-side desses campos.
+//
+// `query` filtra por substring de displayName/email (passado como ?query=).
+// Vazio = todos.
+//
+// Fonte: https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-user-search/
+func (s *RESTSource) SearchUsers(ctx context.Context, query string, limit int) ([]User, error) {
+	const pageSize = 100
+	out := make([]User, 0, 64)
+	startAt := 0
+
+	for {
+		q := url.Values{}
+		q.Set("startAt", strconv.Itoa(startAt))
+		q.Set("maxResults", strconv.Itoa(pageSize))
+		if query != "" {
+			q.Set("query", query)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			s.baseURL+"/rest/api/3/users/search?"+q.Encode(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("build users request: %w", err)
+		}
+		req.Header.Set("Authorization", s.authHeader)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("jira request: %w", err)
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+			resp.Body.Close()
+			return nil, &APIError{StatusCode: resp.StatusCode, Message: string(body)}
+		}
+
+		var batch []User
+		if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("decode users response: %w", err)
+		}
+		resp.Body.Close()
+
+		for _, u := range batch {
+			if u.AccountType != "" && u.AccountType != "atlassian" {
+				continue
+			}
+			if !u.Active {
+				continue
+			}
+			out = append(out, u)
+			if limit > 0 && len(out) >= limit {
+				return out, nil
+			}
+		}
+
+		// Paginação Jira: se a página voltou menos que maxResults, acabou.
+		if len(batch) < pageSize {
+			break
+		}
+		startAt += pageSize
+	}
+	return out, nil
 }
 
 // APIError representa um erro retornado pela API Jira.

@@ -83,6 +83,48 @@ func (c *Client) ListEnvironments(ctx context.Context, projectID string) ([]Envi
 	return envs, nil
 }
 
+// Member é a projeção de um membro de projeto/grupo GitLab usada para
+// alimentar `platform.person_identity` (kind=gitlab).
+//
+// Apenas os campos que casam com `internal/identities` heurística:
+// id (external_id), username, name, public_email.
+type Member struct {
+	ID          int    `json:"id"`
+	Username    string `json:"username"`
+	Name        string `json:"name"`
+	PublicEmail string `json:"public_email"`
+	WebURL      string `json:"web_url"`
+}
+
+// ListProjectMembers percorre as páginas e devolve todos os membros do
+// projeto (inclui herdados do grupo). Esquerda do pipeline da Fase 3.5:
+// alimenta person_identity para o auto-match heurístico.
+//
+// Endpoint: GET /api/v4/projects/:id/members/all?per_page=100&page=N
+// (`/all` inclui herdados do grupo; `/members` direto seria só os
+// adicionados explicitamente no projeto).
+func (c *Client) ListProjectMembers(ctx context.Context, projectID string) ([]Member, error) {
+	var all []Member
+	page := 1
+	for {
+		path := fmt.Sprintf(
+			"/api/v4/projects/%s/members/all?per_page=100&page=%d",
+			url.PathEscape(projectID), page,
+		)
+		var batch []Member
+		nextPage, err := c.doGetJSONPaged(ctx, path, &batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if nextPage == 0 {
+			break
+		}
+		page = nextPage
+	}
+	return all, nil
+}
+
 // ListDeploymentsOpts agrupa os filtros suportados.
 type ListDeploymentsOpts struct {
 	Environment  string

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -120,6 +121,65 @@ func TestAPIError_FormatsMessage(t *testing.T) {
 	const want = "gitlab api: 429 rate limited"
 	if got := e.Error(); got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// ListProjectMembers usa o endpoint /members/all (com herdados do grupo).
+func TestListProjectMembers_HitsMembersAllEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/api/v4/projects/42/members/all") {
+			t.Errorf("path = %s, want contains /api/v4/projects/42/members/all", r.URL.Path)
+		}
+		if r.Header.Get("PRIVATE-TOKEN") != "tok" {
+			t.Errorf("missing PRIVATE-TOKEN header")
+		}
+		_, _ = w.Write([]byte(`[
+			{"id": 10, "username": "alice_dev", "name": "Alice", "public_email": "alice@acme.com", "web_url": "https://gitlab.example/alice_dev"},
+			{"id": 11, "username": "bob_dev", "name": "Bob", "public_email": "", "web_url": "https://gitlab.example/bob_dev"}
+		]`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "tok")
+	members, err := c.ListProjectMembers(context.Background(), "42")
+	if err != nil {
+		t.Fatalf("ListProjectMembers: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("got %d members, want 2", len(members))
+	}
+	if members[0].Username != "alice_dev" || members[0].ID != 10 {
+		t.Errorf("first member = %+v", members[0])
+	}
+	if members[1].PublicEmail != "" {
+		t.Errorf("expected empty email for bob, got %q", members[1].PublicEmail)
+	}
+}
+
+// Paginação: 2 páginas via X-Next-Page header.
+func TestListProjectMembers_Paginated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		switch page {
+		case "1", "":
+			w.Header().Set("X-Next-Page", "2")
+			_, _ = w.Write([]byte(`[{"id":1,"username":"a","name":"A"}]`))
+		case "2":
+			w.Header().Set("X-Next-Page", "")
+			_, _ = w.Write([]byte(`[{"id":2,"username":"b","name":"B"}]`))
+		default:
+			t.Errorf("unexpected page=%s", page)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "tok")
+	members, err := c.ListProjectMembers(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("ListProjectMembers: %v", err)
+	}
+	if len(members) != 2 {
+		t.Errorf("expected 2 members across 2 pages, got %d", len(members))
 	}
 }
 
