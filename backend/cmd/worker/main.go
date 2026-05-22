@@ -36,6 +36,16 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	otelShutdown, err := observability.InitTracing(rootCtx, "worker")
+	if err != nil {
+		log.Warn().Err(err).Msg("init tracing falhou — seguindo sem tracing")
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = otelShutdown(shutdownCtx)
+	}()
+
 	db, err := storage.NewPool(rootCtx, cfg.Database)
 	if err != nil {
 		log.Fatal().Err(err).Msg("connect database")
@@ -169,6 +179,18 @@ func buildScheduler(redisOpt asynq.RedisClientOpt) (*asynq.Scheduler, error) {
 		asynq.MaxRetry(2),
 	)
 	if _, err := s.Register("0 0 1 * *", snapshotTask); err != nil {
+		return nil, err
+	}
+
+	// Digest semanal — segunda 09:00 UTC. Calcula a foto da semana
+	// anterior (deploys, incidents, delta de tier).
+	digestTask := asynq.NewTask(
+		collector.TaskDigestWeekly,
+		nil,
+		asynq.Queue(collector.QueueDefault),
+		asynq.MaxRetry(2),
+	)
+	if _, err := s.Register("0 9 * * 1", digestTask); err != nil {
 		return nil, err
 	}
 

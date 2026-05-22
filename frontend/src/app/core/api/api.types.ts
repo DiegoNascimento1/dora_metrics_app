@@ -216,3 +216,23 @@ export interface AlertEvent {
   lastError: string | null;
   deliveredAt: string | null;
 }
+
+// ---- weekly digest (Fase 4) ----
+export interface DigestContributor {
+  personId: string | null;
+  name: string;
+  deploys: number;
+}
+
+export interface WeeklyDigest {
+  isoWeek: string;          // "2026-W21"
+  weekStart: string;        // ISO date "2026-05-18"
+  weekEnd: string;          // ISO date "2026-05-24"
+  deploymentsCount: number;
+  incidentsCount: number;
+  currentTier: string | null;
+  previousTier: string | null;
+  tierDelta: number;        // +1 subiu, -1 caiu, 0 igual
+  topContributors: DigestContributor[];
+  computedAt: string;
+}

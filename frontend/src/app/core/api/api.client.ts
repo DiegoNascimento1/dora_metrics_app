@@ -25,6 +25,7 @@ import {
   TimeseriesResponse,
   UpdateAlertRuleRequest,
   UpdateTeamRequest,
+  WeeklyDigest,
 } from './api.types';
 
 const API_BASE = '/api/v1';
@@ -193,6 +194,29 @@ export class ApiClient {
     return this.http.get<TimeseriesResponse>(
       `${API_BASE}/teams/${teamId}/timeseries`,
       { params: { window } },
+    );
+  }
+
+  // ---- weekly digest (Fase 4) ----
+
+  getProjectDigest(
+    projectId: string,
+    week?: string,
+  ): Observable<WeeklyDigest> {
+    const params: Record<string, string> = {};
+    if (week) params['week'] = week;
+    return this.http.get<WeeklyDigest>(
+      `${API_BASE}/projects/${projectId}/digest`,
+      { params },
+    );
+  }
+
+  getTeamDigest(teamId: string, week?: string): Observable<WeeklyDigest> {
+    const params: Record<string, string> = {};
+    if (week) params['week'] = week;
+    return this.http.get<WeeklyDigest>(
+      `${API_BASE}/teams/${teamId}/digest`,
+      { params },
     );
   }
 

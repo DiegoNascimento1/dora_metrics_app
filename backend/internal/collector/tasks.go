@@ -17,6 +17,7 @@ const (
 	TaskCollectJira          = "collect:jira:incidents"
 	TaskComputeMetricWindow  = "compute:metric_window"
 	TaskSnapshotMonthly      = "snapshot:monthly"
+	TaskDigestWeekly         = "digest:weekly"
 	TaskDispatchAlert        = "dispatch:alert"
 )
 
