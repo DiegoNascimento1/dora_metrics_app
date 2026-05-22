@@ -23,6 +23,11 @@ type ProjectStats struct {
 	EliteMonthsCount      int    // n de meses históricos com classificação Elite (drive de "First Elite Month")
 	LeadTimeMedianSeconds *int64 // mediana atual em segundos (drive de "Speed Demon")
 	LastIncidentsMTTR     []int64 // MTTR em segundos dos últimos N incidents resolvidos (drive de "Recovery Master")
+	// TierProgressionLast3Months registra o classification (string) dos
+	// últimos 3 metric_monthly_snapshot, ordem cronológica (idx 0 = 3 meses
+	// atrás, idx 2 = mês passado). Drive de "Most Improved".
+	// nil ou len < 2 = não avalia.
+	TierProgressionLast3Months []string
 }
 
 // EvaluateAchievements aplica as regras vigentes e devolve as conquistas
@@ -121,5 +126,58 @@ func EvaluateAchievements(s ProjectStats, nowISO string) []Achievement {
 		}
 	}
 
+	// 📈 Most Improved — maior salto de tier ao longo do histórico curto
+	// (≥ 2 snapshots disponíveis). Desbloqueia quando o tier mais recente
+	// está pelo menos 2 níveis acima do mais antigo (ex: low→high, medium
+	// →elite). Ranks: insufficient_data=0, low=1, medium=2, high=3, elite=4.
+	if mostImprovedUnlocked(s.TierProgressionLast3Months) {
+		out = append(out, Achievement{
+			Code:        "most_improved",
+			Title:       "Most Improved",
+			Description: "Salto de pelo menos 2 tiers no histórico recente",
+			Icon:        "trending_up",
+			UnlockedAt:  nowISO,
+		})
+	}
+
 	return out
+}
+
+// classificationRank é a ordem usada para comparar tiers no Most Improved.
+// Mantém em sincronia com `internal/calculator/classification.go`.
+func classificationRank(c string) int {
+	switch c {
+	case "elite":
+		return 4
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// mostImprovedUnlocked decide se "Most Improved" desbloqueia. Precisa
+// de ≥ 2 snapshots e que o tier mais recente seja pelo menos 2 ranks
+// acima do mínimo já observado. Ambos `insufficient_data` no início e
+// no fim retornam false (não tem o que celebrar).
+func mostImprovedUnlocked(progression []string) bool {
+	if len(progression) < 2 {
+		return false
+	}
+	latest := classificationRank(progression[len(progression)-1])
+	if latest == 0 {
+		return false
+	}
+	minRank := latest
+	for _, c := range progression {
+		r := classificationRank(c)
+		if r > 0 && r < minRank {
+			minRank = r
+		}
+	}
+	return latest-minRank >= 2
 }

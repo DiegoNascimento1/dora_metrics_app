@@ -199,6 +199,62 @@ func TestEvaluateAchievements_RecoveryMaster_TooFew(t *testing.T) {
 	}
 }
 
+func TestEvaluateAchievements_MostImproved_Unlocks(t *testing.T) {
+	// low → medium → elite (salto >= 2 ranks)
+	out := EvaluateAchievements(ProjectStats{
+		TierProgressionLast3Months: []string{"low", "medium", "elite"},
+		CurrentClassification:      "elite",
+	}, "2026-05-22")
+	if !hasCode(out, "most_improved") {
+		t.Error("salto low→elite deveria desbloquear most_improved")
+	}
+}
+
+func TestEvaluateAchievements_MostImproved_SingleStepDoesNotUnlock(t *testing.T) {
+	// low → medium (salto de 1 rank)
+	out := EvaluateAchievements(ProjectStats{
+		TierProgressionLast3Months: []string{"low", "medium"},
+	}, "2026-05-22")
+	if hasCode(out, "most_improved") {
+		t.Error("salto de 1 rank não deveria desbloquear most_improved")
+	}
+}
+
+func TestEvaluateAchievements_MostImproved_DownwardDoesNotUnlock(t *testing.T) {
+	// elite → medium (regrediu)
+	out := EvaluateAchievements(ProjectStats{
+		TierProgressionLast3Months: []string{"elite", "medium"},
+	}, "2026-05-22")
+	if hasCode(out, "most_improved") {
+		t.Error("regressão não deveria desbloquear most_improved")
+	}
+}
+
+func TestEvaluateAchievements_MostImproved_InsufficientData(t *testing.T) {
+	// 1 ponto só / insufficient_data no fim
+	for _, p := range [][]string{
+		nil,
+		{"low"},
+		{"low", "insufficient_data"},
+	} {
+		out := EvaluateAchievements(ProjectStats{TierProgressionLast3Months: p}, "2026-05-22")
+		if hasCode(out, "most_improved") {
+			t.Errorf("progression %v não deveria desbloquear", p)
+		}
+	}
+}
+
+func TestEvaluateAchievements_MostImproved_IgnoresInsufficientInMin(t *testing.T) {
+	// insufficient_data → low → high (medium foi pulado).
+	// min real é 1 (low), latest é 3 (high) → diff 2 → desbloqueia.
+	out := EvaluateAchievements(ProjectStats{
+		TierProgressionLast3Months: []string{"insufficient_data", "low", "high"},
+	}, "2026-05-22")
+	if !hasCode(out, "most_improved") {
+		t.Error("insufficient inicial não deveria impedir cálculo de min")
+	}
+}
+
 func hasCode(achievements []Achievement, code string) bool {
 	for _, a := range achievements {
 		if a.Code == code {
