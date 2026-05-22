@@ -53,7 +53,9 @@ func New(kind string) (Provider, error) {
 		return NewEnvProvider(), nil
 	case "vault":
 		return NewVaultProvider()
-	case "aws-secrets-manager", "azure-key-vault":
+	case "aws-secrets-manager":
+		return NewAWSSecretsManagerProvider()
+	case "azure-key-vault":
 		return nil, errors.New("secret provider not implemented yet: " + kind)
 	default:
 		return nil, errors.New("unknown secret provider: " + kind)
