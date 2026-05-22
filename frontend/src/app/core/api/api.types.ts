@@ -217,6 +217,32 @@ export interface AlertEvent {
   deliveredAt: string | null;
 }
 
+// ---- Atlassian OAuth (Fase 3) ----
+export interface AtlassianConnection {
+  id: string;
+  provider: 'atlassian';
+  cloudId?: string;
+  siteUrl?: string;
+  scope: string;
+  expiresAt: string;
+  connectedAt: string;
+  connectedBy?: string;
+  lastRefreshedAt?: string | null;
+  lastRefreshError?: string;
+  healthy: boolean;
+}
+
+export interface AtlassianStatus {
+  connected: boolean;
+  available: boolean;
+  reason?: string;
+  connection?: AtlassianConnection;
+}
+
+export interface AtlassianAuthorizeResponse {
+  authorizeUrl: string;
+}
+
 // ---- weekly digest (Fase 4) ----
 export interface DigestContributor {
   personId: string | null;

@@ -20,6 +20,7 @@ import { ApiClient } from '../../core/api/api.client';
 import { SourceInstance } from '../../core/api/api.types';
 import { SkeletonComponent } from '../../shared/skeleton.component';
 import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { JiraConnectCardComponent } from './jira-connect-card.component';
 import {
   IntegrationDialogComponent,
   IntegrationDialogData,
@@ -41,6 +42,7 @@ import {
     MatSnackBarModule,
     SkeletonComponent,
     EmptyStateComponent,
+    JiraConnectCardComponent,
   ],
   template: `
     <h1>Configurações</h1>
@@ -55,6 +57,8 @@ import {
         Atualizar
       </button>
     </div>
+
+    <app-jira-connect-card [tenant]="tenant" />
 
     @if (loading()) {
       <div class="grid">

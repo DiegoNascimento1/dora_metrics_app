@@ -22,6 +22,8 @@ import {
   Team,
   TestConnectionRequest,
   TestConnectionResponse,
+  AtlassianAuthorizeResponse,
+  AtlassianStatus,
   TimeseriesResponse,
   UpdateAlertRuleRequest,
   UpdateTeamRequest,
@@ -194,6 +196,33 @@ export class ApiClient {
     return this.http.get<TimeseriesResponse>(
       `${API_BASE}/teams/${teamId}/timeseries`,
       { params: { window } },
+    );
+  }
+
+  // ---- Atlassian OAuth (Fase 3) ----
+
+  getAtlassianStatus(tenant: string): Observable<AtlassianStatus> {
+    return this.http.get<AtlassianStatus>(
+      `${API_BASE}/integrations/atlassian/status`,
+      { headers: { 'X-Tenant-Slug': tenant } },
+    );
+  }
+
+  startAtlassianAuthorize(
+    tenant: string,
+    returnTo: string,
+  ): Observable<AtlassianAuthorizeResponse> {
+    return this.http.post<AtlassianAuthorizeResponse>(
+      `${API_BASE}/integrations/atlassian/authorize`,
+      { returnTo },
+      { headers: { 'X-Tenant-Slug': tenant } },
+    );
+  }
+
+  disconnectAtlassian(tenant: string): Observable<void> {
+    return this.http.delete<void>(
+      `${API_BASE}/integrations/atlassian/connection`,
+      { headers: { 'X-Tenant-Slug': tenant } },
     );
   }
 
