@@ -52,7 +52,7 @@ import { EmptyStateComponent } from '../../shared/empty-state.component';
             description="Conecte uma instância GitLab primeiro e depois adicione um projeto via CLI ou na próxima fatia (admin endpoint)."
           >
             <a mat-flat-button color="primary" routerLink="/settings">
-              <mat-icon>cable</mat-icon>
+              <mat-icon fontIcon="cable"></mat-icon>
               Ir para integrações
             </a>
           </app-empty-state>

@@ -27,7 +27,7 @@ import { ProjectAchievements } from '../../core/api/api.types';
           <div class="streak-row">
             @if (d.daysSinceLastIncident < 0) {
               <div class="streak-empty">
-                <mat-icon class="streak-icon-muted">help</mat-icon>
+                <mat-icon class="streak-icon-muted" fontIcon="help"></mat-icon>
                 <div>
                   <div class="streak-label">Sem incidents registrados</div>
                   <div class="muted">
@@ -38,7 +38,7 @@ import { ProjectAchievements } from '../../core/api/api.types';
               </div>
             } @else {
               <div class="streak">
-                <mat-icon class="streak-icon">local_fire_department</mat-icon>
+                <mat-icon class="streak-icon" fontIcon="local_fire_department"></mat-icon>
                 <div>
                   <div class="streak-value">
                     {{ d.daysSinceLastIncident }}
@@ -56,7 +56,7 @@ import { ProjectAchievements } from '../../core/api/api.types';
             <div class="badges">
               @for (a of d.achievements; track a.code) {
                 <div class="badge" [title]="a.description">
-                  <mat-icon class="badge-icon">{{ a.icon }}</mat-icon>
+                  <mat-icon class="badge-icon" [fontIcon]="a.icon "></mat-icon>
                   <div class="badge-body">
                     <div class="badge-title">{{ a.title }}</div>
                     <div class="badge-desc">{{ a.description }}</div>

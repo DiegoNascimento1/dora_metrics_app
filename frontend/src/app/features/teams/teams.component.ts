@@ -49,7 +49,7 @@ import {
     <div class="head">
       <h1>Times</h1>
       <button mat-flat-button color="primary" (click)="openCreate()">
-        <mat-icon>add</mat-icon>
+        <mat-icon fontIcon="add"></mat-icon>
         Novo time
       </button>
     </div>
@@ -80,7 +80,7 @@ import {
             description="Crie seu primeiro time para agrupar projetos. Cada time ganha cor + emoji para identidade visual e poderá ter métricas DORA agregadas."
           >
             <button mat-flat-button color="primary" (click)="openCreate()">
-              <mat-icon>add</mat-icon>
+              <mat-icon fontIcon="add"></mat-icon>
               Criar primeiro time
             </button>
           </app-empty-state>
@@ -102,22 +102,22 @@ import {
                 class="team-menu-btn"
                 [attr.aria-label]="'Menu do time ' + t.name"
               >
-                <mat-icon>more_vert</mat-icon>
+                <mat-icon fontIcon="more_vert"></mat-icon>
               </button>
               <mat-menu #teamMenu="matMenu">
                 <button mat-menu-item (click)="openEdit(t)">
-                  <mat-icon>edit</mat-icon>
+                  <mat-icon fontIcon="edit"></mat-icon>
                   <span>Editar</span>
                 </button>
                 <button mat-menu-item (click)="removeTeam(t)">
-                  <mat-icon color="warn">delete_outline</mat-icon>
+                  <mat-icon color="warn" fontIcon="delete_outline"></mat-icon>
                   <span>Excluir</span>
                 </button>
               </mat-menu>
             </div>
             <mat-card-content class="team-body">
               <div class="member-count">
-                <mat-icon class="count-icon">folder</mat-icon>
+                <mat-icon class="count-icon" fontIcon="folder"></mat-icon>
                 <span>{{ projectsForTeam(t.id).length }}</span>
                 <span class="muted">projetos</span>
               </div>
@@ -134,7 +134,7 @@ import {
                         matTooltip="Remover do time"
                         [attr.aria-label]="'Remover ' + p.pathWithNamespace + ' do time'"
                       >
-                        <mat-icon>link_off</mat-icon>
+                        <mat-icon fontIcon="link_off"></mat-icon>
                       </button>
                     </li>
                   }

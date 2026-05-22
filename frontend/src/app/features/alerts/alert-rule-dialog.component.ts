@@ -48,7 +48,7 @@ export interface AlertRuleDialogData {
   ],
   template: `
     <h2 mat-dialog-title>
-      <mat-icon class="title-icon">notifications_active</mat-icon>
+      <mat-icon class="title-icon" fontIcon="notifications_active"></mat-icon>
       {{ data.rule ? 'Editar regra' : 'Nova regra de alerta' }}
     </h2>
 
@@ -142,7 +142,7 @@ export interface AlertRuleDialogData {
         @if (saving()) {
           <mat-progress-spinner mode="indeterminate" diameter="18" />
         } @else {
-          <mat-icon>save</mat-icon>
+          <mat-icon fontIcon="save"></mat-icon>
         }
         {{ data.rule ? 'Salvar' : 'Criar' }}
       </button>

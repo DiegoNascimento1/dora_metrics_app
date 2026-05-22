@@ -18,7 +18,7 @@ export const appConfig: ApplicationConfig = {
     // Material 21 default fontSet é "material-icons" (clássico, não
     // carregamos). Trocamos pra "material-symbols-outlined" + adicionamos
     // "mat-ligature-font" pra Material reconhecer como fonte de ligature
-    // e usar o path correto (essencial pra <mat-icon>nome</mat-icon> ainda
+    // e usar o path correto (essencial pra <mat-icon fontIcon="nome"></mat-icon> ainda
     // funcionar sem precisar mudar todos os templates pra fontIcon="nome").
     {
       provide: MAT_ICON_DEFAULT_OPTIONS,

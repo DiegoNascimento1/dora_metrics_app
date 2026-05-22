@@ -51,7 +51,7 @@ import {
         <input matInput [(ngModel)]="tenant" (change)="reload()" placeholder="acme" />
       </mat-form-field>
       <button mat-stroked-button (click)="reload()">
-        <mat-icon>refresh</mat-icon>
+        <mat-icon fontIcon="refresh"></mat-icon>
         Atualizar
       </button>
     </div>
@@ -85,7 +85,7 @@ import {
                 color="primary"
                 (click)="addIntegration('gitlab')"
               >
-                <mat-icon>add</mat-icon>
+                <mat-icon fontIcon="add"></mat-icon>
                 Conectar GitLab
               </button>
             </div>
@@ -104,7 +104,7 @@ import {
                     <strong>{{ i.displayName }}</strong>
                     <div class="muted"><code>{{ i.baseUrl }}</code></div>
                     <div class="muted-2">
-                      <mat-icon class="row-icon">vpn_key</mat-icon>
+                      <mat-icon class="row-icon" fontIcon="vpn_key"></mat-icon>
                       {{ i.hasSecret ? 'Token armazenado' : 'Usa env var (' + i.authRef + ')' }}
                       · criado {{ i.createdAt | date: 'short' }}
                     </div>
@@ -115,7 +115,7 @@ import {
                     (click)="removeIntegration(i)"
                     [attr.aria-label]="'Remover ' + i.displayName"
                   >
-                    <mat-icon>delete_outline</mat-icon>
+                    <mat-icon fontIcon="delete_outline"></mat-icon>
                   </button>
                 </div>
               }
@@ -139,7 +139,7 @@ import {
                 color="primary"
                 (click)="addIntegration('jira')"
               >
-                <mat-icon>add</mat-icon>
+                <mat-icon fontIcon="add"></mat-icon>
                 Conectar Jira
               </button>
             </div>
@@ -158,9 +158,9 @@ import {
                     <strong>{{ i.displayName }}</strong>
                     <div class="muted"><code>{{ i.baseUrl }}</code></div>
                     <div class="muted-2">
-                      <mat-icon class="row-icon">person</mat-icon>
+                      <mat-icon class="row-icon" fontIcon="person"></mat-icon>
                       {{ i.authEmail || '—' }} ·
-                      <mat-icon class="row-icon">vpn_key</mat-icon>
+                      <mat-icon class="row-icon" fontIcon="vpn_key"></mat-icon>
                       {{ i.hasSecret ? 'Token armazenado' : 'Usa env var' }}
                       · criado {{ i.createdAt | date: 'short' }}
                     </div>
@@ -171,7 +171,7 @@ import {
                     (click)="removeIntegration(i)"
                     [attr.aria-label]="'Remover ' + i.displayName"
                   >
-                    <mat-icon>delete_outline</mat-icon>
+                    <mat-icon fontIcon="delete_outline"></mat-icon>
                   </button>
                 </div>
               }

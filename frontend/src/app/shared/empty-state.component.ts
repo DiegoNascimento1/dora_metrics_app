@@ -16,7 +16,7 @@ import { MatIconModule } from '@angular/material/icon';
   template: `
     <div class="empty">
       <div class="icon-wrap">
-        <mat-icon class="icon">{{ icon() }}</mat-icon>
+        <mat-icon class="icon" [fontIcon]="icon() "></mat-icon>
       </div>
       <h3 class="title">{{ title() }}</h3>
       @if (description()) {

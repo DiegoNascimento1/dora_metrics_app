@@ -104,13 +104,13 @@ export interface IntegrationDialogData {
           (click)="showSecret.set(!showSecret())"
           [attr.aria-label]="showSecret() ? 'Esconder' : 'Mostrar'"
         >
-          <mat-icon>{{ showSecret() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          <mat-icon [fontIcon]="showSecret() ? 'visibility_off' : 'visibility' "></mat-icon>
         </button>
       </mat-form-field>
 
       @if (testResult(); as r) {
         <div class="test-result" [class.ok]="r.ok" [class.bad]="!r.ok">
-          <mat-icon>{{ r.ok ? 'check_circle' : 'error' }}</mat-icon>
+          <mat-icon [fontIcon]="r.ok ? 'check_circle' : 'error' "></mat-icon>
           <div>
             <strong>{{ r.ok ? 'Conexão OK' : 'Falha' }}</strong>
             @if (r.message) {
@@ -133,7 +133,7 @@ export interface IntegrationDialogData {
         @if (testing()) {
           <mat-progress-spinner mode="indeterminate" diameter="16" />
         } @else {
-          <mat-icon>cloud_sync</mat-icon>
+          <mat-icon fontIcon="cloud_sync"></mat-icon>
         }
         Testar conexão
       </button>

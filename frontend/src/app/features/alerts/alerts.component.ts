@@ -60,11 +60,11 @@ import {
         />
       </mat-form-field>
       <button mat-stroked-button (click)="reload()">
-        <mat-icon>refresh</mat-icon>
+        <mat-icon fontIcon="refresh"></mat-icon>
         Atualizar
       </button>
       <button mat-flat-button color="primary" (click)="openCreate()">
-        <mat-icon>add</mat-icon>
+        <mat-icon fontIcon="add"></mat-icon>
         Nova regra
       </button>
     </div>
@@ -107,7 +107,7 @@ import {
                     </mat-chip>
                   </div>
                   <div class="rule-meta">
-                    <mat-icon class="row-icon">link</mat-icon>
+                    <mat-icon class="row-icon" fontIcon="link"></mat-icon>
                     <code>{{ rule.webhookUrl }}</code>
                   </div>
                   <div class="rule-meta-2">
@@ -121,7 +121,7 @@ import {
                     matTooltip="Editar"
                     (click)="openEdit(rule)"
                   >
-                    <mat-icon>edit</mat-icon>
+                    <mat-icon fontIcon="edit"></mat-icon>
                   </button>
                   <button
                     mat-icon-button
@@ -129,7 +129,7 @@ import {
                     matTooltip="Remover"
                     (click)="remove(rule)"
                   >
-                    <mat-icon>delete_outline</mat-icon>
+                    <mat-icon fontIcon="delete_outline"></mat-icon>
                   </button>
                 </div>
               </div>
@@ -177,7 +177,7 @@ import {
                   <td>{{ e.firedAt | date: 'short' }}</td>
                   <td>
                     <code>{{ e.previousTier ?? '—' }}</code>
-                    <mat-icon class="arrow">arrow_right_alt</mat-icon>
+                    <mat-icon class="arrow" fontIcon="arrow_right_alt"></mat-icon>
                     <code>{{ e.currentTier }}</code>
                   </td>
                   <td>{{ e.scopeKind }}</td>

@@ -71,7 +71,7 @@ type Window = '7d' | '30d' | '90d';
             description="Primeiro passo: conecte uma instância GitLab/Jira e cadastre um projeto para começar a ver suas 4 métricas em ação."
           >
             <a mat-flat-button color="primary" routerLink="/settings">
-              <mat-icon>cable</mat-icon> Conectar GitLab/Jira
+              <mat-icon fontIcon="cable"></mat-icon> Conectar GitLab/Jira
             </a>
           </app-empty-state>
         </mat-card-content>
@@ -120,7 +120,7 @@ type Window = '7d' | '30d' | '90d';
         </mat-form-field>
 
         <button mat-stroked-button (click)="reload()">
-          <mat-icon>refresh</mat-icon>
+          <mat-icon fontIcon="refresh"></mat-icon>
           Atualizar
         </button>
       </div>

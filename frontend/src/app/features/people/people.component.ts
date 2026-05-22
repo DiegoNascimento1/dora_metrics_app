@@ -68,7 +68,7 @@ type Window = '7d' | '30d' | '90d';
         <input matInput [(ngModel)]="tenant" (change)="reload()" placeholder="acme" />
       </mat-form-field>
       <button mat-stroked-button (click)="reload()">
-        <mat-icon>refresh</mat-icon> Atualizar
+        <mat-icon fontIcon="refresh"></mat-icon> Atualizar
       </button>
     </div>
 
@@ -139,7 +139,7 @@ type Window = '7d' | '30d' | '90d';
       }
 
       <p class="hint">
-        <mat-icon class="hint-icon">drag_indicator</mat-icon>
+        <mat-icon class="hint-icon" fontIcon="drag_indicator"></mat-icon>
         Arraste uma identidade da lista para o card de uma pessoa para vincular.
       </p>
 
@@ -231,7 +231,7 @@ type Window = '7d' | '30d' | '90d';
               @for (i of unlinked(); track i.id) {
                 <div class="identity-card" cdkDrag [cdkDragData]="i">
                   <div class="drag-handle">
-                    <mat-icon>drag_indicator</mat-icon>
+                    <mat-icon fontIcon="drag_indicator"></mat-icon>
                   </div>
                   <div>
                     <span [class]="'src-chip src-' + i.kind">{{ i.kind }}</span>
@@ -246,7 +246,7 @@ type Window = '7d' | '30d' | '90d';
                     matTooltip="Criar nova pessoa a partir desta identidade"
                     aria-label="Criar nova pessoa"
                   >
-                    <mat-icon>person_add</mat-icon>
+                    <mat-icon fontIcon="person_add"></mat-icon>
                   </button>
                 </div>
               }

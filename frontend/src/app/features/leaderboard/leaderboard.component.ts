@@ -105,7 +105,7 @@ const TIER_RANK: Record<Classification, number> = {
             description="Crie pelo menos um time antes — atribua projetos pra ele e volte aqui."
           >
             <a mat-flat-button color="primary" routerLink="/teams">
-              <mat-icon>add</mat-icon>
+              <mat-icon fontIcon="add"></mat-icon>
               Ir para times
             </a>
           </app-empty-state>
@@ -160,13 +160,13 @@ const TIER_RANK: Record<Classification, number> = {
 
             @if (i === 0 && r.metrics?.classification !== 'insufficient_data') {
               <div class="badge-top">
-                <mat-icon>workspace_premium</mat-icon>
+                <mat-icon fontIcon="workspace_premium"></mat-icon>
                 Liderando
               </div>
             }
             @if (i === rows().length - 1 && rows().length > 1) {
               <div class="badge-growth">
-                <mat-icon>trending_up</mat-icon>
+                <mat-icon fontIcon="trending_up"></mat-icon>
                 Em crescimento
               </div>
             }

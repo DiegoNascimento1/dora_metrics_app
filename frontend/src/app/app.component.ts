@@ -29,18 +29,18 @@ import { ThemeService } from './core/theme/theme.service';
       <span class="spacer"></span>
       <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
       <a mat-button routerLink="/leaderboard" routerLinkActive="active">
-        <mat-icon class="nav-icon">leaderboard</mat-icon>
+        <mat-icon class="nav-icon" fontIcon="leaderboard"></mat-icon>
         Leaderboard
       </a>
       <a mat-button routerLink="/projects" routerLinkActive="active">Projetos</a>
       <a mat-button routerLink="/teams" routerLinkActive="active">Times</a>
       <a mat-button routerLink="/people" routerLinkActive="active">Pessoas</a>
       <a mat-button routerLink="/alerts" routerLinkActive="active">
-        <mat-icon class="nav-icon">notifications_active</mat-icon>
+        <mat-icon class="nav-icon" fontIcon="notifications_active"></mat-icon>
         Alertas
       </a>
       <a mat-button routerLink="/settings" routerLinkActive="active">
-        <mat-icon class="nav-icon">settings</mat-icon>
+        <mat-icon class="nav-icon" fontIcon="settings"></mat-icon>
         Configurações
       </a>
 
@@ -53,7 +53,7 @@ import { ThemeService } from './core/theme/theme.service';
           theme.isDark() ? 'Mudar para tema claro' : 'Mudar para tema escuro'
         "
       >
-        <mat-icon>{{ theme.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        <mat-icon [fontIcon]="theme.isDark() ? 'light_mode' : 'dark_mode' "></mat-icon>
       </button>
     </mat-toolbar>
 
