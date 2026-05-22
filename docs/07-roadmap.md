@@ -4,7 +4,7 @@ Fases de construção da plataforma. Cada fase tem **critérios de saída** — 
 
 A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adicionando valor sem grandes rewrites.
 
-> **Status (2026-05-22):** Fases 0–5 todas ~100% código-completas. Fase 3 fechada com OIDC (`angular-auth-oidc-client@21` + PKCE, runtime config para plugar IdP sem rebuild). Fase 4 fechada com multi-tenant middleware + weekly digest. Fase 5 fechada com OAuth 2.1 PKCE no MCP server (Bearer estático continua como fallback). Secret management completo (env / Vault / AWS Secrets Manager — Azure ainda stub). Rotação de credenciais via `cli secrets check|rotate`. Container frontend hardenizado (nginx-unprivileged + CSP). 9 suites unit Go + 7 Testcontainers + 3 Karma. **Itens restantes:** Azure Key Vault stub (plugar SDK), refinamentos contínuos da Fase 6.
+> **Status (2026-05-22):** Fases 0–5 ✅ Completas. Fase 6 ~60% (Code Review/Pickup Time, benchmarks de indústria, PagerDuty/Opsgenie e anti-gaming entregues; SLO externo e predição em backlog). Secret management completo nos 3 grandes providers (env / Vault / AWS / Azure). Risco "métrica gameada" mitigado. 12 suites unit Go + 7 Testcontainers + 3 Karma. **Pendentes:** apenas itens de produto (DORA Reliability v2 com SLOs externos, predição de degradação) e refinamentos pontuais sem decisão tomada.
 
 ## Fase 0 — Fundação — ✅ Completa
 
@@ -124,15 +124,15 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 
 **Critério de saída:** um SRE pergunta ao Claude "como está nosso CFR?" via desktop e recebe resposta com dados reais. Atendido (modo Bearer estático).
 
-## Fase 6 — Métricas auxiliares e refinamentos (contínuo)
+## Fase 6 — Métricas auxiliares e refinamentos (contínuo) — 🟢 ~60%
 
-A partir daqui, evolução contínua sem big bangs. Backlog:
+Evolução contínua. Marcações:
 
-- Code Review Time, Pickup Time (sub-componentes do Lead Time)
-- DORA Reliability (v2): integração com SLOs externos
-- Predição: alertar antes de degradação, baseado em sinais antecedentes
-- Comparação com benchmarks de indústria (anonimizado)
-- Integração com PagerDuty/Opsgenie para incidentes
+- [x] **Code Review Time + Pickup Time** — `internal/calculator/subcomponents.go` decompõe o Lead Time em Pickup (commit → MR open), Review (MR open → merge) e Deploy Lag (merge → deploy). `AggregateLeadTime` calcula medianas. 7 testes unit cobrindo casos completos, parciais, negativos descartados, mediana ímpar/par, nil-tolerant agregação.
+- [x] **Comparação com benchmarks de indústria (anonimizado)** — endpoint REST `GET /api/v1/benchmarks` + resource MCP estável `dora://benchmarks` expõe percentis p50/p75/p90 do DORA Report 2024. Frontend pode dizer "seu projeto está no percentil X" sem agregar dados de outros clientes.
+- [x] **Integração com PagerDuty/Opsgenie para incidentes** — `internal/collector/alert_destinations.go` detecta destino pelo host da webhook_url e adapta o body: PagerDuty Events API v2 (com `dedup_key=event_id` para suprimir duplicatas + `event_action=resolve` em promoções), Opsgenie Alerts API v2 (auth via `GenieKey` no header, `api_key` removido da URL para não vazar). Destino genérico (Slack/Teams) preserva o formato original. 6 testes unit cobrindo detect + payload PagerDuty (severity por tier, resolve em promoção, exige routing_key), Opsgenie (alias dedup, priority P2 para low, tags), e no-op genérico.
+- [ ] DORA Reliability (v2): integração com SLOs externos
+- [ ] Predição: alertar antes de degradação, baseado em sinais antecedentes
 
 ## Trilhas transversais
 
@@ -223,7 +223,7 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 ### Segurança — Pendente
 
 - [x] OIDC para o frontend — entregue na Fase 3 (`angular-auth-oidc-client@21` com Authorization Code Flow + PKCE).
-- [x] Secret management real — `VaultProvider` (HashiCorp Vault KVv2) + **`AWSSecretsManagerProvider`** (AWS Secrets Manager via HTTP+SigV4 minimalista, sem AWS SDK). Estratégia de lookup em 2 passos (chave direta `{prefix}/{key}` ou fallback `{prefix}/credentials` JSON-agrupado). Vault: 6 testes httptest; AWS: 7 testes (lookup direto, group fallback, not found, 5xx, requires-region, SigV4 Authorization header bem-formado, session token incluído em SignedHeaders). Azure Key Vault continua TODO (estrutura pronta — só plugar SDK).
+- [x] Secret management real — **`VaultProvider`** (HashiCorp Vault KVv2) + **`AWSSecretsManagerProvider`** (AWS Secrets Manager via HTTP+SigV4 minimalista) + **`AzureKeyVaultProvider`** (Azure Key Vault via REST + AAD OAuth Client Credentials, token cache 60s). Os 3 providers compartilham a estratégia de lookup em 2 passos (chave direta `{prefix}-{key}` ou fallback `{prefix}-credentials` JSON-agrupado). Cobertura: Vault 6 testes, AWS 7 testes (inclui SigV4 Authorization bem-formado + session token), Azure 6 testes (inclui token cache reuse + sanitização underscore→hífen).
 - [x] Hardening de containers — backend já era distroless (`gcr.io/distroless/static-debian12:nonroot`); frontend migrado de `nginx:alpine` para `nginxinc/nginx-unprivileged:1.27-alpine` rodando como uid 101 (sem root, sem CAP_NET_BIND_SERVICE). Porta interna :8080 (mapeamento compose 4200→8080). nginx.conf ganhou headers de hardening: X-Content-Type-Options nosniff, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy negando camera/mic/geo, Content-Security-Policy conservadora, `server_tokens off`. Healthcheck Docker no `/index.html`.
 - [x] Rotação de credenciais GitLab/Jira — CLI `cli secrets check` valida que todos `auth_ref` das source-instances resolvem no provider corrente (exit 1 se algum falha). `cli secrets rotate --tenant X --source N --new-ref NEW` reaponta a source-instance para um novo nome de segredo sem tocar no valor (admin provisiona o novo segredo no backend → roda rotate → check → revoga o antigo).
 
@@ -243,7 +243,7 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 | Atlassian muda capabilities do MCP server                            | Discovery dinâmico de tools planejado para Fase 3; mantemos fallback REST                          |
 | Volume de dados explode em organizações grandes                      | Particionamento de `raw_event` por dia + retenção (ADR 0002 documenta gatilhos para Timescale)     |
 | Time não confia nas métricas (data quality)                          | Drill-down até os eventos brutos já entregue na Fase 3                                             |
-| Métrica gameada (deploy de MR vazio para inflar DF)                  | Pendente — reportar tamanho médio de mudança junto da DF; sinalizar anomalias                      |
+| Métrica gameada (deploy de MR vazio para inflar DF)                  | `internal/calculator/gaming.go`: heurística `AnalyzeGaming` calcula % de MRs triviais (≤5 linhas) e mediana de tamanho na janela; sinaliza `gamingFlag=true` quando ≥50% dos deploys vieram de MRs triviais. Frontend renderiza aviso neutro ("considere revisar"). 9 testes unit cobrindo small sample, no-gaming, flag, ignora unknown, mediana, exato no threshold. |
 
 ## Fontes
 
