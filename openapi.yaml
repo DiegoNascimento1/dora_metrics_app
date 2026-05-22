@@ -141,6 +141,62 @@ paths:
                 items:
                   $ref: "#/components/schemas/Deployment"
 
+  /api/v1/projects/{projectId}/export:
+    get:
+      tags: [metrics]
+      summary: Dump bruto da janela em CSV ou JSON
+      description: >
+        Exporta deployments, incidents ou merge requests do projeto dentro
+        da janela em CSV (default) ou JSON. Responde com header
+        Content-Disposition: attachment para forçar download direto pelo
+        navegador. Fecha o critério "Exportação CSV/JSON" da Fase 4.
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: kind
+          required: true
+          schema:
+            type: string
+            enum: [deployments, incidents, merge_requests]
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, json]
+            default: csv
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: Arquivo baixável (CSV ou JSON) com o dump da janela.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="<kind>-<slug>-<window>-<date>.<ext>"
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "400":
+          description: Parâmetro `kind` ou `format` inválido.
+        "404":
+          description: Projeto não encontrado.
+
   /api/v1/people:
     get:
       tags: [people]

@@ -62,6 +62,7 @@ func (s *Server) routes() {
 		r.Get("/projects/{projectId}/timeseries", s.handleProjectTimeseries())
 		r.Get("/projects/{projectId}/deployments", s.handleProjectDeployments())
 		r.Get("/projects/{projectId}/achievements", s.handleProjectAchievements())
+		r.Get("/projects/{projectId}/export", s.handleProjectExport())
 
 		r.Get("/people", s.handleListPeople())
 		r.Post("/people", s.handleCreatePerson())

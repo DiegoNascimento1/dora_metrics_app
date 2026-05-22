@@ -11,6 +11,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin, of, catchError, finalize } from 'rxjs';
@@ -53,6 +55,8 @@ type Window = '7d' | '30d' | '90d';
     MatFormFieldModule,
     MatButtonModule,
     MatIconModule,
+    MatMenuModule,
+    MatTooltipModule,
     SkeletonComponent,
     EmptyStateComponent,
     TimeseriesChartComponent,
@@ -123,6 +127,43 @@ type Window = '7d' | '30d' | '90d';
           <mat-icon fontIcon="refresh"></mat-icon>
           Atualizar
         </button>
+
+        @if (scope === 'project' && selectedProjectId) {
+          <button
+            mat-stroked-button
+            [matMenuTriggerFor]="exportMenu"
+            matTooltip="Baixar dump bruto da janela"
+          >
+            <mat-icon fontIcon="download"></mat-icon>
+            Exportar
+          </button>
+          <mat-menu #exportMenu="matMenu">
+            <button mat-menu-item [matMenuTriggerFor]="exportDeploy">
+              <mat-icon fontIcon="rocket_launch"></mat-icon>
+              Deployments
+            </button>
+            <button mat-menu-item [matMenuTriggerFor]="exportIncidents">
+              <mat-icon fontIcon="report"></mat-icon>
+              Incidents
+            </button>
+            <button mat-menu-item [matMenuTriggerFor]="exportMRs">
+              <mat-icon fontIcon="merge"></mat-icon>
+              Merge Requests
+            </button>
+          </mat-menu>
+          <mat-menu #exportDeploy="matMenu">
+            <a mat-menu-item [href]="exportUrl('deployments', 'csv')" download>CSV</a>
+            <a mat-menu-item [href]="exportUrl('deployments', 'json')" download>JSON</a>
+          </mat-menu>
+          <mat-menu #exportIncidents="matMenu">
+            <a mat-menu-item [href]="exportUrl('incidents', 'csv')" download>CSV</a>
+            <a mat-menu-item [href]="exportUrl('incidents', 'json')" download>JSON</a>
+          </mat-menu>
+          <mat-menu #exportMRs="matMenu">
+            <a mat-menu-item [href]="exportUrl('merge_requests', 'csv')" download>CSV</a>
+            <a mat-menu-item [href]="exportUrl('merge_requests', 'json')" download>JSON</a>
+          </mat-menu>
+        }
       </div>
 
       @if (loading()) {
@@ -399,6 +440,18 @@ export class DashboardComponent {
         this.achievements.set(null);
         this.deployments.set([]);
       });
+  }
+
+  exportUrl(
+    kind: 'deployments' | 'incidents' | 'merge_requests',
+    format: 'csv' | 'json',
+  ): string {
+    return this.api.projectExportUrl(
+      this.selectedProjectId!,
+      kind,
+      format,
+      this.selectedWindow,
+    );
   }
 
   private formatDuration(seconds: number | null | undefined): string {

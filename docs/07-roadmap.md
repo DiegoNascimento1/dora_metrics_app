@@ -108,7 +108,7 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 - [ ] Suporte a múltiplas `source_instance` simultâneas (já está no schema; falta exercitar)
 - [ ] Suporte a múltiplos tenants reais (isolamento, billing-like — mesmo que internamente)
 - [x] Histórico mensal congelado (`metric_monthly_snapshot`) — task `snapshot:monthly` agendada `0 0 1 * *` (1º dia do mês 00:00 UTC) lê o último `metric_window` 30d de cada projeto ativo e congela em `metric_monthly_snapshot` com mês = mês anterior. Idempotente
-- [ ] Exportação CSV/JSON
+- [x] Exportação CSV/JSON — `GET /api/v1/projects/{id}/export?kind=deployments|incidents|merge_requests&format=csv|json&window=30d`. CSV via `encoding/csv`; JSON pelo `writeJSON` padrão. Resposta com `Content-Disposition: attachment; filename="<kind>-<slug>-<window>-<date>.<ext>"`. Frontend: menu "Exportar" no dashboard (botão `mat-stroked-button` no header de filtros) com submenus por tipo e formato, usando `<a [href] download>` para download direto sem JS extra
 
 **Critério de saída:** time recebe alerta no Teams quando CFR ultrapassa limiar, com ruído controlado (regra de "mudança de estado", não disparar todo dia).
 

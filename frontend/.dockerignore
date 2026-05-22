@@ -1,0 +1,9 @@
+node_modules
+dist
+.angular
+.cache
+coverage
+*.log
+.env
+.env.local
+.git

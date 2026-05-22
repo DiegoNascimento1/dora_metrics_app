@@ -112,9 +112,16 @@ type Querier interface {
 	// Incidents cujos jira_project_key estão no array do projeto. Usado pelo
 	// linking incident ↔ deployment e pelos cálculos por janela.
 	ListIncidentsForProject(ctx context.Context, projectID uuid.UUID) ([]PlatformIncident, error)
+	// Incidents do projeto cuja janela toca o intervalo: tanto os criados
+	// quanto os resolvidos a partir de `since` entram (cobre "abertos no
+	// período" e "fechados no período" — útil para auditoria de MTTR).
+	ListIncidentsInWindowForProject(ctx context.Context, arg ListIncidentsInWindowForProjectParams) ([]ListIncidentsInWindowForProjectRow, error)
 	// MRs do projeto cujo merged_at cai no intervalo (gt, lte]. Usado para
 	// atribuir MRs ao deployment que "fechou" aquele intervalo de tempo.
 	ListMergedMRsBetween(ctx context.Context, arg ListMergedMRsBetweenParams) ([]PlatformMergeRequest, error)
+	// MRs do projeto mergeados a partir de `since`. Usado pelo export do
+	// drill-down (lista bruta sem depender de correlação com deploy).
+	ListMergedMRsInWindowForProject(ctx context.Context, arg ListMergedMRsInWindowForProjectParams) ([]ListMergedMRsInWindowForProjectRow, error)
 	ListPeople(ctx context.Context, tenantID uuid.UUID) ([]PlatformPerson, error)
 	// Deployments de produção do projeto ordenados por finished_at ASC.
 	// Usado pela correlação MR ↔ deployment.

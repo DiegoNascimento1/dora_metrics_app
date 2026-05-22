@@ -225,4 +225,20 @@ export class ApiClient {
   healthz(): Observable<{ status: string }> {
     return this.http.get<{ status: string }>('/healthz');
   }
+
+  // ---- export (Fase 4 — Critério de saída) ----
+
+  /**
+   * Constrói a URL do dump bruto da janela. O backend serve com
+   * Content-Disposition attachment, então um <a download> ou
+   * window.location dispara o salvamento direto pelo navegador.
+   */
+  projectExportUrl(
+    projectId: string,
+    kind: 'deployments' | 'incidents' | 'merge_requests',
+    format: 'csv' | 'json' = 'csv',
+    window: '7d' | '30d' | '90d' = '30d',
+  ): string {
+    return `${API_BASE}/projects/${projectId}/export?kind=${kind}&format=${format}&window=${window}`;
+  }
 }
