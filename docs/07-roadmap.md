@@ -220,7 +220,7 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 - [x] Tracing OpenTelemetry — `internal/observability/tracing.go` inicializa TracerProvider OTLP gRPC. Variáveis: `OTEL_EXPORTER_OTLP_ENDPOINT` (no-op se vazia), `OTEL_EXPORTER_OTLP_INSECURE=true`, `OTEL_SERVICE_VERSION`. Inicializado em `cmd/api`, `cmd/worker` e `cmd/mcp-server`. Shutdown idempotente com flush
 - [x] Dashboard Grafana exemplo — `ops/grafana/dashboards/dora-overview.json` com 6 painéis (HTTP P95 por rota, throughput por status, asynq throughput/tipo, asynq error rate com thresholds 5%/20%, latência média de task, total requests 1h). Compose acessório em `ops/grafana/docker-compose.yml` sobe Prometheus + Grafana provisionados. README com queries PromQL completas
 
-### Segurança — Pendente
+### Segurança — ✅ Completa
 
 - [x] OIDC para o frontend — entregue na Fase 3 (`angular-auth-oidc-client@21` com Authorization Code Flow + PKCE).
 - [x] Secret management real — **`VaultProvider`** (HashiCorp Vault KVv2) + **`AWSSecretsManagerProvider`** (AWS Secrets Manager via HTTP+SigV4 minimalista) + **`AzureKeyVaultProvider`** (Azure Key Vault via REST + AAD OAuth Client Credentials, token cache 60s). Os 3 providers compartilham a estratégia de lookup em 2 passos (chave direta `{prefix}-{key}` ou fallback `{prefix}-credentials` JSON-agrupado). Cobertura: Vault 6 testes, AWS 7 testes (inclui SigV4 Authorization bem-formado + session token), Azure 6 testes (inclui token cache reuse + sanitização underscore→hífen).
