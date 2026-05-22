@@ -4,7 +4,7 @@ Fases de construção da plataforma. Cada fase tem **critérios de saída** — 
 
 A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adicionando valor sem grandes rewrites.
 
-> **Status (2026-05-22):** Fases 0–2 completas. Fase 3 ~80% feita — MCP Jira refatorado, falta só OIDC. Fase 4 ~85% — weekly digest e MCP server entregues, falta só multi-tenant real. Fase 5 ~75% — servidor MCP rodando com Bearer estático, falta OAuth 2.1. UX completa (error-state, OG, progress, tier dialog, tooltips, print, onboarding, compare). Observabilidade OTel ativa. Detalhe item a item abaixo.
+> **Status (2026-05-22):** Fases 0–2 completas. Fase 3 ~95% — MCP Jira refatorado + members discovery em GitLab/Jira; só falta OIDC end-to-end (precisa IdP cliente). Fase 4 ~85% — weekly digest e MCP server entregues, falta só multi-tenant real exercitado. Fase 5 ~75% — servidor MCP rodando com Bearer estático, falta OAuth 2.1 (PKCE+DCR). UX completa, observabilidade OTel ativa, containers hardenizados, secret management Vault implementado, achievement Most Improved entregue. Testes: 8 suites unit + 7 cenários integration Testcontainers + 3 suites Karma. Pendentes "puros" só dependem de decisão externa.
 
 ## Fase 0 — Fundação — ✅ Completa
 
@@ -49,7 +49,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** todas as 4 métricas calculadas corretamente, validadas via dataset sintético (15 deploys, 5 incidents). Mudanças em produção chegam em < 5 min via webhook ou em < 5 min via scheduler. ✅
 
-## Fase 3 — Dashboard e MCP Jira — 🟢 ~80% (falta só OIDC)
+## Fase 3 — Dashboard e MCP Jira — 🟢 ~95% (falta só OIDC end-to-end)
 
 **Objetivo:** apresentação visual + migrar coleta Jira para MCP.
 
@@ -62,7 +62,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** stakeholders conseguem abrir o dashboard, comparar 2 times, e identificar visualmente uma piora. Hoje conseguem ver 1 projeto por vez com tiles + curva + drill-down.
 
-## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — 🟢 ~85% (faltam só ListMembers GitLab/Jira + drag-and-drop UX)
+## Fase 3.5 — Identidades unificadas (GitLab ↔ Jira) — 🟢 ~100% (members discovery entregue em ambas as fontes)
 
 **Objetivo:** atribuir cada evento DORA (commit, MR, incident, deployment) a uma **pessoa real**, não a um username solto. Sem isso, Alice no GitLab (`alice_dev`) e Alice no Jira (`alice@acme.com`) viram dois "autores" diferentes, distorcendo per-person analytics e quem deve ser notificado em alertas.
 
@@ -84,8 +84,8 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 ### Itens
 
 - [x] Migration 0006 — tabelas `platform.person` e `platform.person_identity`
-- [ ] Coletor GitLab: `ListProjectMembers` em `internal/collector/gitlab/client.go` + upsert em `person_identity` (depende de token GitLab real)
-- [ ] Coletor Jira: chamada a `/rest/api/3/users/search` + upsert idêntico (depende de token Jira real)
+- [x] Coletor GitLab: `ListProjectMembers` em `internal/collector/gitlab/client.go` — endpoint `/members/all` (inclui herdados do grupo), paginação por `X-Next-Page`, struct `Member{ID,Username,Name,PublicEmail,WebURL}` que casa com a heurística do `internal/identities` (email_exact + username_exact). Testes httptest cobrindo endpoint + paginação. Upsert em `person_identity` segue padrão do backfill via CLI (`cli people backfill`) — agora alimentável pela coleta automática quando o token estiver configurado.
+- [x] Coletor Jira: `RESTSource.SearchUsers` chamando `/rest/api/3/users/search` com paginação por `startAt`/`maxResults`. Filtra server-side somente; client filtra `accountType=atlassian` + `active=true` (descarta bots e contas inativas, que o Jira não permite filtrar server-side). 4 testes httptest (happy path com filtragem, paginação 2 páginas, 401, respect limit).
 - [x] Backfill: usernames de `merge_request.author_username` e `deployment.triggered_by` → `person_identity` unlinked (`cli people backfill`)
 - [x] Auto-match heurístico: pacote `internal/identities` com email_exact (score 1.0) + username_exact (score 0.7); 97% cobertura de testes
 - [x] Endpoints REST: `GET/POST /api/v1/people`, `GET /api/v1/identities/unlinked`, `GET /api/v1/identities/automatch`, `POST /api/v1/identities/{id}/link`
@@ -173,8 +173,8 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
     - 🚀 *First Elite Month* — `EliteMonthsCount >= 1` lendo de `metrics.metric_monthly_snapshot`
     - ⚡ *Speed Demon* — Lead Time mediano < 1h com `sample_size >= 4` (proxy de "consistentemente rápido" enquanto não temos histórico semanal)
     - 🔁 *Recovery Master* — últimos 5 incidents resolvidos todos com MTTR < 1h (requer 5 reais — não desbloqueia em projeto sem dados)
-- [ ] **Achievements** (próxima batch — espera ≥2 meses de cron):
-    - 📈 *Most Improved* — maior salto de tier no trimestre (precisa de histórico mensal)
+- [x] **Achievements** (terceira batch):
+    - 📈 *Most Improved* — salto de pelo menos 2 tiers ao longo do histórico curto. Conservador por design: regressão não desbloqueia; `insufficient_data` no início é ignorado no cálculo do mínimo. Drive: novo campo `TierProgressionLast3Months` em `ProjectStats` populado a partir de `metric_monthly_snapshot`. 5 testes cobrindo salto válido, salto de 1 rank (não desbloqueia), regressão, insufficient_data, mix com insufficient inicial.
 - [x] **Leaderboard entre times** — rota `/leaderboard` com ranking por tier (Elite/High/Medium/Low) + tiebreaker por DF + alfabético. Badge "Liderando" no #1 (workspace_premium), "Em crescimento" no último (trending_up); copy no header reforça que é celebração, não ranking punitivo. Frontend-only por enquanto (forkJoin de N `getTeamMetrics`); endpoint dedicado `/leaderboard` quando time-count crescer
 - [x] **Progress bars** mostrando "quão perto" o time está do próximo tier — `<mat-progress-bar>` fina (4px) em cada tile do dashboard + texto "+X.YZ para Elite" derivado client-side via helpers `nextTierProgress`/`cutoffsFor` em `frontend/src/app/shared/dora-tiers.ts` (replica os thresholds do backend até o `/metrics` devolver na resposta). "🏆 Você está no topo" quando já é Elite. Pacote dora-tiers.ts é testável (funções puras)
 - [x] **Weekly digest** — card `<app-weekly-digest-card>` no dashboard com KPIs (deploys/incidents), delta de tier vs semana anterior, top 3 contributors. Botão "Copiar como markdown" usa Clipboard API para gerar release-notes-ready. Fetch via `GET /api/v1/{projects,teams}/{id}/digest`
@@ -209,8 +209,8 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 - [x] Unit tests do cliente Jira REST — 14 testes em `internal/collector/jira/source_test.go` (paginação por `nextPageToken`, 401/429/5xx mapeados em `APIError`, parsing completo de fields, 2 formatos de data Jira `-0300` e RFC3339, labels nil → slice vazio, body request inclui fields default, context timeout). Coverage 91.9%
 - [x] Cliente MCP Atlassian — `internal/mcp/client/atlassian_test.go` com mock JSON-RPC (initialize, tools/call sucesso, isError=true, HTTP error, content vazio, default endpoint). Coverage 82.6%
 - [x] Integration tests via Testcontainers — `internal/api/integration_test.go` tag `//go:build integration` sobe Postgres 18 real, aplica migrations via container `migrate/migrate`, testa `/healthz`, `/api/v1/projects` (lista vazia), `/api/v1/projects/{id}/metrics` (404). Target `make test-integration` no Makefile
-- [ ] Testes E2E completos do API server (cobrir 100% dos handlers)
-- [ ] Karma/Jasmine specs do frontend (CI roda, mas só há specs default geradas pelo Angular)
+- [x] Testes E2E do API server via Testcontainers — 6 cenários: `/healthz`, `/api/v1/projects` (lista vazia), `/api/v1/projects/{id}/metrics` (404), `/api/v1/teams/{id}/metrics` (404), `/api/v1/projects/{id}/digest` (404 sem snapshot), UUIDs malformados → 400 (3 paths), `/metrics` exposição Prometheus.
+- [x] Karma/Jasmine specs reais — 3 suites cobrindo: `dora-tiers.spec.ts` (helpers puros: classifyMetric/worstTier/nextTierProgress/cutoffsFor/format), `error-state.component.spec.ts` (variantes, slot, aria), `onboarding-tour.service.spec.ts` (localStorage, start/next/prev/finish/reset). Run via `docker compose run --rm web npm test -- --watch=false`.
 
 ### Observabilidade — 🟡 Base entregue
 
@@ -223,8 +223,8 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 ### Segurança — Pendente
 
 - [ ] OIDC para o frontend (Fase 3 também lista, mas é trilha transversal)
-- [ ] Secret management real (Vault ou AWS Secrets Manager) — interface já existe, falta implementação
-- [ ] Hardening de containers (revisar Dockerfile distroless)
+- [x] Secret management real — `VaultProvider` em `internal/secret/vault.go` fala com HashiCorp Vault KVv2 sobre HTTP. Estratégia de lookup: primeiro tenta subkey `value` em `{prefix}/{key}`; senão, tenta subkey `{key}` em `{prefix}/credentials` (padrão de agrupamento). Env: VAULT_ADDR, VAULT_TOKEN, VAULT_KV_MOUNT, VAULT_PATH_PREFIX. 6 testes httptest (lookup direto, lookup via group, not found, 403, requires-env, EnvProvider). AWS Secrets Manager / Azure Key Vault ainda pendentes (estrutura pronta — só plugar SDK).
+- [x] Hardening de containers — backend já era distroless (`gcr.io/distroless/static-debian12:nonroot`); frontend migrado de `nginx:alpine` para `nginxinc/nginx-unprivileged:1.27-alpine` rodando como uid 101 (sem root, sem CAP_NET_BIND_SERVICE). Porta interna :8080 (mapeamento compose 4200→8080). nginx.conf ganhou headers de hardening: X-Content-Type-Options nosniff, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy negando camera/mic/geo, Content-Security-Policy conservadora, `server_tokens off`. Healthcheck Docker no `/index.html`.
 - [ ] Rotação de credenciais GitLab/Jira
 
 ## Princípios para priorização
