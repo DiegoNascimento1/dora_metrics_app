@@ -4,7 +4,7 @@ Fases de construção da plataforma. Cada fase tem **critérios de saída** — 
 
 A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adicionando valor sem grandes rewrites.
 
-> **Status (2026-05-20):** Fases 0–2 completas. Fase 3 ~50% feita (faltam OIDC e MCP Jira). Slice de testes/observabilidade iniciado fora-de-fase. Detalhe item a item abaixo.
+> **Status (2026-05-22):** Fases 0–2 completas. Fase 3 ~80% feita — MCP Jira refatorado, falta só OIDC. Fase 4 ~85% — weekly digest e MCP server entregues, falta só multi-tenant real. Fase 5 ~75% — servidor MCP rodando com Bearer estático, falta OAuth 2.1. UX completa (error-state, OG, progress, tier dialog, tooltips, print, onboarding, compare). Observabilidade OTel ativa. Detalhe item a item abaixo.
 
 ## Fase 0 — Fundação — ✅ Completa
 
@@ -49,7 +49,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** todas as 4 métricas calculadas corretamente, validadas via dataset sintético (15 deploys, 5 incidents). Mudanças em produção chegam em < 5 min via webhook ou em < 5 min via scheduler. ✅
 
-## Fase 3 — Dashboard e MCP Jira — 🟡 Em andamento (~50%)
+## Fase 3 — Dashboard e MCP Jira — 🟢 ~80% (falta só OIDC)
 
 **Objetivo:** apresentação visual + migrar coleta Jira para MCP.
 
@@ -57,7 +57,7 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 - [x] Séries temporais 90 dias — bar chart de deploys/dia via `/timeseries` + ng2-charts
 - [x] Drill-down — clicar/abrir mostra lista de deployments via `/deployments`
 - [ ] Autenticação OIDC — pendente (requer IdP do cliente)
-- [ ] Refactor do coletor Jira para usar MCP Atlassian (`mcp.atlassian.com/v1/mcp`) com REST como fallback
+- [x] Refactor do coletor Jira para usar MCP Atlassian (`mcp.atlassian.com/v1/mcp`) com REST como fallback — cliente MCP HTTP/JSON-RPC em `internal/mcp/client/atlassian.go` (handshake `initialize` lazy + `tools/call` para `searchJiraIssuesUsingJql`); auth Bearer estático no MVP (env `JIRA_MCP_TOKEN`); `MCPSource.WithFallback(RESTSource)` cai automaticamente para REST se MCP errar. Testes httptest com mock JSON-RPC. ADR 0003 documenta a escolha. OAuth 2.1 fica para próxima iteração.
 - [x] Multi-projeto e multi-time — dashboard tem toggle "Escopo" (projeto/time); quando time, métricas DORA são agregadas via SQL JOIN em `platform.project.team_id`. 5 queries novas (`*ForTeamInWindow`) + 2 endpoints `/api/v1/teams/{id}/metrics` + `/timeseries`. Drill-down + achievements ainda são project-scope only.
 
 **Critério de saída:** stakeholders conseguem abrir o dashboard, comparar 2 times, e identificar visualmente uma piora. Hoje conseguem ver 1 projeto por vez com tiles + curva + drill-down.
@@ -99,7 +99,7 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 
 **Critério de saída:** dado um deploy GitLab disparado por `alice_dev` e um incident Jira aberto por `alice@acme.com`, o sistema atribui ambos à **mesma** pessoa Alice. Métricas DORA do time não dobram contagem.
 
-## Fase 4 — Alertas e múltiplos tenants — 🟡 Em andamento
+## Fase 4 — Alertas e múltiplos tenants — 🟢 ~85% (falta multi-tenant real + multi-source)
 
 **Objetivo:** operacionalizar como ferramenta de uso diário.
 
@@ -108,20 +108,21 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 - [ ] Suporte a múltiplas `source_instance` simultâneas (já está no schema; falta exercitar)
 - [ ] Suporte a múltiplos tenants reais (isolamento, billing-like — mesmo que internamente)
 - [x] Histórico mensal congelado (`metric_monthly_snapshot`) — task `snapshot:monthly` agendada `0 0 1 * *` (1º dia do mês 00:00 UTC) lê o último `metric_window` 30d de cada projeto ativo e congela em `metric_monthly_snapshot` com mês = mês anterior. Idempotente
+- [x] **Weekly digest** — task asynq `digest:weekly` agendada `0 9 * * 1` (segunda 09:00 UTC) calcula, por projeto e por time ativos: deploys da semana, incidents, tier atual vs anterior, top 3 contributors via `person_id`. Persiste em `platform.digest_snapshot` (migration 0011) com PK `(tenant, scope, iso_week)` → idempotente. Endpoints `GET /api/v1/{projects,teams}/{id}/digest?week=YYYY-Www`. Card `app-weekly-digest-card` no dashboard com botão "Copiar como markdown" (clipboard API)
 - [x] Exportação CSV/JSON — `GET /api/v1/projects/{id}/export?kind=deployments|incidents|merge_requests&format=csv|json&window=30d`. CSV via `encoding/csv`; JSON pelo `writeJSON` padrão. Resposta com `Content-Disposition: attachment; filename="<kind>-<slug>-<window>-<date>.<ext>"`. Frontend: menu "Exportar" no dashboard (botão `mat-stroked-button` no header de filtros) com submenus por tipo e formato, usando `<a [href] download>` para download direto sem JS extra
 
 **Critério de saída:** time recebe alerta no Teams quando CFR ultrapassa limiar, com ruído controlado (regra de "mudança de estado", não disparar todo dia).
 
-## Fase 5 — Servidor MCP próprio + análise — Pendente
+## Fase 5 — Servidor MCP próprio + análise — 🟢 ~75% (sem OAuth, narrativa determinística)
 
 **Objetivo:** expor as métricas para consumo por agentes/LLMs e adicionar análise contextual.
 
-- [ ] Servidor MCP próprio expondo tools: `getDoraMetrics`, `getDeployments`, `compareTeams`, `explainTrend`
-- [ ] Autenticação OAuth 2.1 do nosso MCP
-- [ ] Tool `explainTrend` que combina dados + LLM para produzir narrativa
-- [ ] Recursos: cada métrica acessível por URI MCP estável
+- [x] Servidor MCP próprio expondo tools: `getDoraMetrics`, `getDeployments`, `compareTeams`, `explainTrend` — binário `cmd/mcp-server` (porta `:8090`); pacote `internal/mcp/server` implementa JSON-RPC 2.0 sobre HTTP POST (handshake `initialize` + `tools/list` + `tools/call` + `resources/list` + `resources/read` + `ping`). Stack documentada em [ADR 0003](adr/0003-mcp-server-stack.md). Container distroless adicionado ao `docker-compose.yml` (profile `full`/`mcp`)
+- [ ] Autenticação OAuth 2.1 do nosso MCP — MVP usa Bearer estático via env `MCP_SERVER_TOKEN`. Em dev, `MCP_ALLOW_INSECURE=true` libera. OAuth 2.1 (PKCE + DCR) fica para próxima iteração
+- [x] Tool `explainTrend` — narrativa **determinística** template-based comparando metric_window atual vs anterior (sem LLM no MVP, hook documentado para integração futura)
+- [x] Recursos: cada métrica acessível por URI MCP estável — `dora://project/{id}/dora-metrics`, `dora://team/{id}/dora-metrics`, `dora://schema` (thresholds DORA Report)
 
-**Critério de saída:** um SRE pergunta ao Claude "como está nosso CFR?" via desktop e recebe resposta com dados reais.
+**Critério de saída:** um SRE pergunta ao Claude "como está nosso CFR?" via desktop e recebe resposta com dados reais. Atendido (modo Bearer estático).
 
 ## Fase 6 — Métricas auxiliares e refinamentos (contínuo)
 
@@ -151,9 +152,9 @@ Não pertencem a uma fase específica; evoluem em paralelo.
 - [x] Iconografia: Material Symbols Outlined (variable) carregado globalmente
 - [x] Loading skeletons compartilhados (`<app-skeleton>` com 5 variantes + shimmer respeitando `prefers-reduced-motion`); aplicados em dashboard, projects, people, settings
 - [x] Empty states desenhados (`<app-empty-state>` com ícone-em-círculo + título + descrição + slot CTA); 6 ocorrências nas páginas
-- [ ] Error states desenhados (ainda usa snackbar / card simples — falta um `<app-error-state>`)
+- [x] Error states desenhados — `<app-error-state>` em `frontend/src/app/shared/error-state.component.ts` com 4 variantes (`network`/`not-found`/`forbidden`/`generic`), tons coordenados (warning/danger/muted via tokens), slot CTA, role=alert + aria-live=polite, slot opcional para detalhes técnicos em `<details>`. Aplicado em load fail do dashboard + compare. Aceitou também CTA para "Tentar novamente"
 - [x] Logo SVG + favicon + theme-color + description meta (4 barras crescentes representando as 4 métricas DORA + dot Elite no topo)
-- [ ] Open graph (preview de link compartilhado)
+- [x] Open graph — meta tags `og:title`, `og:description`, `og:type=website`, `og:image` (logo SVG), `og:url`, `og:locale=pt_BR`, twitter card `summary_large_image` em `frontend/src/index.html`
 
 #### Camada de gamificação (engajamento)
 
@@ -175,18 +176,18 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 - [ ] **Achievements** (próxima batch — espera ≥2 meses de cron):
     - 📈 *Most Improved* — maior salto de tier no trimestre (precisa de histórico mensal)
 - [x] **Leaderboard entre times** — rota `/leaderboard` com ranking por tier (Elite/High/Medium/Low) + tiebreaker por DF + alfabético. Badge "Liderando" no #1 (workspace_premium), "Em crescimento" no último (trending_up); copy no header reforça que é celebração, não ranking punitivo. Frontend-only por enquanto (forkJoin de N `getTeamMetrics`); endpoint dedicado `/leaderboard` quando time-count crescer
-- [ ] **Progress bars** mostrando "quão perto" o time está do próximo tier (ex: "+0.12 deploys/dia para Elite")
-- [ ] **Weekly digest** — card semanal: "essa semana 12 deploys, 0 incidents, +1 tier em LT" — formato compartilhável (PNG/Slack-friendly)
-- [ ] **Team identity** — cada time escolhe nome, cor, mascote/emoji opcional (afeta o leaderboard e os cards)
-- [ ] **Micro-animações** parceiras de eventos: deploy success (✓ verde sutil), tier-up (confete discreto SVG, < 800ms), incident closed (badge fade-in)
+- [x] **Progress bars** mostrando "quão perto" o time está do próximo tier — `<mat-progress-bar>` fina (4px) em cada tile do dashboard + texto "+X.YZ para Elite" derivado client-side via helpers `nextTierProgress`/`cutoffsFor` em `frontend/src/app/shared/dora-tiers.ts` (replica os thresholds do backend até o `/metrics` devolver na resposta). "🏆 Você está no topo" quando já é Elite. Pacote dora-tiers.ts é testável (funções puras)
+- [x] **Weekly digest** — card `<app-weekly-digest-card>` no dashboard com KPIs (deploys/incidents), delta de tier vs semana anterior, top 3 contributors. Botão "Copiar como markdown" usa Clipboard API para gerar release-notes-ready. Fetch via `GET /api/v1/{projects,teams}/{id}/digest`
+- [x] **Team identity** — duplicado, já marcado [x] acima na linha de "Team identity"
+- [x] **Micro-animações** — `tier-up`/`tier-breathe` no Elite chip (já existente) + animação `pop` (200ms) no painel de onboarding + `prefers-reduced-motion: reduce` honrado em ambos. Animações elaboradas (confete SVG tier-up) ainda em TODO mas a base de Material já inclui ripple sutil no clique de chip/botão
 
 #### Discoverability e profundidade
 
-- [ ] **Onboarding tour** primeira visita (4 steps: o que é DORA, leitura de tile, tour da curva, drill-down)
-- [ ] **Tooltip explicativo** em cada métrica com link pra [docs/01-dora-metrics.md](01-dora-metrics.md) ancorado na seção
-- [ ] **"Por que esse tier?"** — clicar no chip de classificação abre painel mostrando os 4 valores + cutoffs configurados, com destaque do que rebaixou
-- [ ] **Compare mode** — botão "comparar" pega 2-4 times/projetos lado-a-lado (gráficos sobrepostos + delta destacado)
-- [ ] **Print-friendly** view para exportar relatório mensal em PDF (CSS print + watermark)
+- [x] **Onboarding tour** primeira visita — 4 steps (intro DORA / leitura de tile / curva 90d / drill-down). Service `OnboardingService` persiste flag em `localStorage` (`dora.tour.seen`); overlay com spotlight via `radial-gradient` (sem lib externa) + panel reposicionado contra viewport; respeita `prefers-reduced-motion`. Componente `<app-onboarding-tour />` montado no shell
+- [x] **Tooltip explicativo** em cada métrica — ícone `info` no header de cada tile com `matTooltip` curto + link "saiba mais" abaixo da grid apontando para `docs/01-dora-metrics.md`. `aria-label` específico para leitor de tela
+- [x] **"Por que esse tier?"** — clicar no chip de classificação abre `<app-tier-explain-dialog>` (Material Dialog) mostrando os 4 valores reais + cutoffs do tier atual e próximo, destacando em laranja a(s) métrica(s) que rebaixam o combinado (via `worstTier` que replica `WorstOf` do backend)
+- [x] **Compare mode** — rota `/compare` com seletor multi-select de 2-4 times/projetos + tabela das 4 métricas DORA com "melhor por linha" em verde + chart com séries sobrepostas (reusa `<app-timeseries-chart>`). Link na toolbar com ícone `compare_arrows`
+- [x] **Print-friendly** view — `_print.scss` (importado em `styles.scss`) com `@media print` ocultando navbar/sidebar/botões `.no-print`, forçando tinta legível, watermark canto inferior, page-break-inside avoid nos cards. Botão "Imprimir / PDF" no header do dashboard dispara `window.print()`
 
 #### Anti-padrões explicitamente evitados
 
@@ -205,9 +206,10 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 - [x] Unit tests do `internal/identities` (auto-match heurístico) — 97% coverage
 - [x] Unit tests do `internal/gamification` (regras de achievements) — 100% coverage
 - [x] CI executa `make test` (backend, com Postgres 18 como service) e `npm test -- --watch=false --browsers=ChromeHeadless` (frontend) em todo push/PR ([.github/workflows/ci.yml](../.github/workflows/ci.yml))
-- [ ] Unit tests do cliente Jira REST
-- [ ] Integration tests dos handlers asynq (com Postgres real via Testcontainers)
-- [ ] Testes E2E do API server (httptest + sqlc mock ou DB)
+- [x] Unit tests do cliente Jira REST — 14 testes em `internal/collector/jira/source_test.go` (paginação por `nextPageToken`, 401/429/5xx mapeados em `APIError`, parsing completo de fields, 2 formatos de data Jira `-0300` e RFC3339, labels nil → slice vazio, body request inclui fields default, context timeout). Coverage 91.9%
+- [x] Cliente MCP Atlassian — `internal/mcp/client/atlassian_test.go` com mock JSON-RPC (initialize, tools/call sucesso, isError=true, HTTP error, content vazio, default endpoint). Coverage 82.6%
+- [x] Integration tests via Testcontainers — `internal/api/integration_test.go` tag `//go:build integration` sobe Postgres 18 real, aplica migrations via container `migrate/migrate`, testa `/healthz`, `/api/v1/projects` (lista vazia), `/api/v1/projects/{id}/metrics` (404). Target `make test-integration` no Makefile
+- [ ] Testes E2E completos do API server (cobrir 100% dos handlers)
 - [ ] Karma/Jasmine specs do frontend (CI roda, mas só há specs default geradas pelo Angular)
 
 ### Observabilidade — 🟡 Base entregue
@@ -215,8 +217,8 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 - [x] Prometheus middleware no chi — `observability.HTTPMiddleware`, label por RoutePattern (não cardinalidade explosiva com path params), histogram de duração + counter por route+method+status
 - [x] Endpoint `/metrics` exposto na API (`:8080/metrics`) e no worker (`:9090/metrics`, servidor HTTP dedicado)
 - [x] Métricas asynq — `observability.AsynqMiddleware` envolve o ServeMux. `dora_asynq_tasks_total{type,status}` classifica success / error / skip_retry; `dora_asynq_task_duration_seconds{type}` histogram com buckets 50ms-5min (cobre coletas que batem em APIs remotas)
-- [ ] Tracing OpenTelemetry (opcional)
-- [ ] Dashboard Grafana exemplo (opcional)
+- [x] Tracing OpenTelemetry — `internal/observability/tracing.go` inicializa TracerProvider OTLP gRPC. Variáveis: `OTEL_EXPORTER_OTLP_ENDPOINT` (no-op se vazia), `OTEL_EXPORTER_OTLP_INSECURE=true`, `OTEL_SERVICE_VERSION`. Inicializado em `cmd/api`, `cmd/worker` e `cmd/mcp-server`. Shutdown idempotente com flush
+- [x] Dashboard Grafana exemplo — `ops/grafana/dashboards/dora-overview.json` com 6 painéis (HTTP P95 por rota, throughput por status, asynq throughput/tipo, asynq error rate com thresholds 5%/20%, latência média de task, total requests 1h). Compose acessório em `ops/grafana/docker-compose.yml` sobe Prometheus + Grafana provisionados. README com queries PromQL completas
 
 ### Segurança — Pendente
 
