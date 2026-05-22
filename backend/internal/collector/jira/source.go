@@ -15,7 +15,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	mcpclient "github.com/dora-metrics-app/backend/internal/mcp/client"
 )
 
 // Issue é a projeção mínima de uma issue Jira que importa para CFR/MTTR.
@@ -40,24 +43,87 @@ type Source interface {
 	Name() string
 }
 
-// MCPSource consome o Atlassian Rovo MCP Server.
-// Stub para futura implementação na Fase 3.
+// MCPSource consome o Atlassian Rovo MCP Server
+// (`https://mcp.atlassian.com/v1/mcp`).
+//
+// O cliente faz handshake `initialize` lazy (apenas na primeira chamada) e
+// invoca a tool `searchJiraIssuesUsingJql` para listar issues. Em caso de
+// erro do MCP, automaticamente cai para o RESTSource fallback (se
+// configurado em `WithFallback`).
+//
+// Auth: Bearer estático (MVP). OAuth 2.1 fica para próxima iteração.
 type MCPSource struct {
-	endpoint string
-	auth     string
+	client      *mcpclient.AtlassianClient
+	fallback    Source
+	initialized atomic.Bool
 }
 
 // NewMCPSource constrói um cliente MCP do Atlassian.
-func NewMCPSource(endpoint, auth string) *MCPSource {
-	return &MCPSource{endpoint: endpoint, auth: auth}
+func NewMCPSource(endpoint, token string) *MCPSource {
+	return &MCPSource{client: mcpclient.NewAtlassianClient(endpoint, token)}
+}
+
+// WithFallback adiciona uma fonte alternativa usada se o MCP falhar
+// (tipicamente um RESTSource). Devolve o próprio MCPSource pra chaining.
+func (s *MCPSource) WithFallback(fb Source) *MCPSource {
+	s.fallback = fb
+	return s
 }
 
 // Name implementa Source.
 func (s *MCPSource) Name() string { return "atlassian-mcp" }
 
-// SearchIssues — stub. Fase 3.
-func (s *MCPSource) SearchIssues(_ context.Context, _ string, _ int) ([]Issue, error) {
-	return nil, ErrNotImplemented
+// SearchIssues chama a tool searchJiraIssuesUsingJql do MCP Atlassian.
+// Cai para o fallback (se houver) se o MCP devolver erro de qualquer tipo.
+func (s *MCPSource) SearchIssues(ctx context.Context, jql string, limit int) ([]Issue, error) {
+	if !s.initialized.Load() {
+		if _, err := s.client.Initialize(ctx); err != nil {
+			return s.useFallback(ctx, jql, limit, err)
+		}
+		s.initialized.Store(true)
+	}
+
+	args := map[string]any{
+		"jql": jql,
+	}
+	if limit > 0 {
+		args["limit"] = limit
+	}
+
+	rawResult, err := s.client.CallTool(ctx, "searchJiraIssuesUsingJql", args)
+	if err != nil {
+		return s.useFallback(ctx, jql, limit, err)
+	}
+
+	// O Atlassian MCP devolve um JSON com array `issues` (mesma shape do REST v3).
+	var resp struct {
+		Issues []json.RawMessage `json:"issues"`
+	}
+	if err := json.Unmarshal(rawResult, &resp); err != nil {
+		return s.useFallback(ctx, jql, limit, fmt.Errorf("decode mcp result: %w", err))
+	}
+
+	out := make([]Issue, 0, len(resp.Issues))
+	for _, raw := range resp.Issues {
+		issue, err := decodeIssue(raw)
+		if err != nil {
+			continue
+		}
+		out = append(out, issue)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+// useFallback registra o erro e delega ao RESTSource fallback (se houver).
+// Devolve o erro original se nada estiver configurado.
+func (s *MCPSource) useFallback(ctx context.Context, jql string, limit int, mcpErr error) ([]Issue, error) {
+	if s.fallback == nil {
+		return nil, fmt.Errorf("mcp falhou e fallback não configurado: %w", mcpErr)
+	}
+	return s.fallback.SearchIssues(ctx, jql, limit)
 }
 
 // RESTSource consome a Jira Cloud REST API v3 com Basic auth.
@@ -185,22 +251,23 @@ func decodeIssue(raw json.RawMessage) (Issue, error) {
 			Priority struct {
 				Name string `json:"name"`
 			} `json:"priority"`
-			Labels         []string  `json:"labels"`
-			Created        time.Time `json:"created"`
-			ResolutionDate *string   `json:"resolutiondate"`
+			Labels         []string `json:"labels"`
+			Created        string   `json:"created"`
+			ResolutionDate *string  `json:"resolutiondate"`
 		} `json:"fields"`
 	}
 	if err := json.Unmarshal(raw, &shape); err != nil {
 		return Issue{}, err
 	}
 
+	created, err := parseJiraTime(shape.Fields.Created)
+	if err != nil {
+		return Issue{}, fmt.Errorf("parsing time %q: %w", shape.Fields.Created, err)
+	}
+
 	var resolved *time.Time
 	if shape.Fields.ResolutionDate != nil && *shape.Fields.ResolutionDate != "" {
-		// Jira retorna "2026-05-19T12:34:56.000-0300" (offset sem dois pontos).
-		t, err := time.Parse("2006-01-02T15:04:05.000-0700", *shape.Fields.ResolutionDate)
-		if err != nil {
-			t, err = time.Parse(time.RFC3339, *shape.Fields.ResolutionDate)
-		}
+		t, err := parseJiraTime(*shape.Fields.ResolutionDate)
 		if err == nil {
 			resolved = &t
 		}
@@ -220,10 +287,22 @@ func decodeIssue(raw json.RawMessage) (Issue, error) {
 		StatusCategory: shape.Fields.Status.StatusCategory.Key,
 		Priority:       shape.Fields.Priority.Name,
 		Labels:         labels,
-		Created:        shape.Fields.Created,
+		Created:        created,
 		Resolved:       resolved,
 		Raw:            raw,
 	}, nil
+}
+
+// parseJiraTime aceita os dois formatos retornados pela Jira Cloud:
+//   - "2026-05-19T12:34:56.000-0300" (offset sem dois pontos — Jira REST v3)
+//   - "2026-05-19T12:34:56Z" / "2026-05-19T12:34:56-03:00" (RFC3339, alguns clientes/webhooks)
+//
+// Devolve o time.Time parseado ou erro do último layout tentado.
+func parseJiraTime(s string) (time.Time, error) {
+	if t, err := time.Parse("2006-01-02T15:04:05.000-0700", s); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
 }
 
 // APIError representa um erro retornado pela API Jira.
