@@ -47,10 +47,14 @@ func (s *Server) routes() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:4200"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Tenant-Slug"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+	// Tenant resolution: injeta TenantInfo no context quando o request
+	// carrega X-Tenant-Slug, subdomínio ou ?tenant=. Não bloqueia se
+	// ausente — handlers existentes derivam tenant via project_id.
+	r.Use(TenantMiddleware(s.db))
 
 	r.Get("/healthz", s.handleHealthz())
 	r.Get("/readyz", s.handleReadyz())
