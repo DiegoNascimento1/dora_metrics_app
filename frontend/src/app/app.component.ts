@@ -6,6 +6,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { ThemeService } from './core/theme/theme.service';
+import {
+  OnboardingService,
+  OnboardingTourComponent,
+} from './shared/onboarding-tour.component';
 
 @Component({
   selector: 'app-root',
@@ -19,6 +23,7 @@ import { ThemeService } from './core/theme/theme.service';
     MatButtonModule,
     MatIconModule,
     MatTooltipModule,
+    OnboardingTourComponent,
   ],
   template: `
     <mat-toolbar class="app-bar">
@@ -28,6 +33,10 @@ import { ThemeService } from './core/theme/theme.service';
       </span>
       <span class="spacer"></span>
       <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a mat-button routerLink="/compare" routerLinkActive="active">
+        <mat-icon class="nav-icon" fontIcon="compare_arrows"></mat-icon>
+        Comparar
+      </a>
       <a mat-button routerLink="/leaderboard" routerLinkActive="active">
         <mat-icon class="nav-icon" fontIcon="leaderboard"></mat-icon>
         Leaderboard
@@ -60,6 +69,8 @@ import { ThemeService } from './core/theme/theme.service';
     <main class="container">
       <router-outlet />
     </main>
+
+    <app-onboarding-tour />
   `,
   styles: [
     `
@@ -120,4 +131,11 @@ import { ThemeService } from './core/theme/theme.service';
 })
 export class AppComponent {
   protected theme = inject(ThemeService);
+  private tour = inject(OnboardingService);
+
+  constructor() {
+    // Inicia o tour na primeira visita (não força se o user já viu).
+    // Aguarda 1 tick para o DOM do dashboard ter renderizado os spotlights.
+    queueMicrotask(() => this.tour.start(false));
+  }
 }

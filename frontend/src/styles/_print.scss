@@ -1,0 +1,94 @@
+/* Print-friendly: visão de relatório otimizada para "Salvar como PDF".
+ *
+ * Estratégia: oculta navegação/chrome do app, expande dashboard ao bleed
+ * total, força fundo branco e tinta legível, mantém badges de tier
+ * coloridos (com `-webkit-print-color-adjust: exact`).
+ *
+ * Watermark sutil no canto inferior é renderizado via ::after no body.
+ */
+@media print {
+  /* Força tinta legível independente do tema. */
+  :root {
+    --color-bg: #ffffff !important;
+    --color-surface: #ffffff !important;
+    --color-text-primary: #111111 !important;
+    --color-text-secondary: #333333 !important;
+    --color-border: #cccccc !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Layout: tira sidebar/toolbar — o seletor cobre o app shell.
+   * Mantém apenas <main> e o conteúdo do feature route. */
+  app-shell-toolbar,
+  app-shell-sidenav,
+  mat-toolbar,
+  mat-sidenav,
+  .mat-sidenav-container .mat-drawer,
+  nav,
+  .filters button,
+  .filters mat-menu,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Expande conteúdo principal */
+  .mat-sidenav-content,
+  main,
+  body > app-root {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Cards quebram bem por página */
+  mat-card,
+  .mat-mdc-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+
+  /* Watermark canto inferior direito. */
+  body::after {
+    content: 'DORA Metrics — relatório impresso';
+    position: fixed;
+    bottom: 8mm;
+    right: 8mm;
+    font-size: 9pt;
+    color: #999;
+    font-family: var(--font-sans, sans-serif);
+    pointer-events: none;
+  }
+
+  /* Badges de tier mantêm cor */
+  .tier-elite,
+  .tier-high,
+  .tier-medium,
+  .tier-low,
+  .tier-insufficient_data,
+  mat-chip[class*='tier-'] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Links sem decoração no impresso (a URL fica como pé no PDF se o user habilitar) */
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Charts (canvas) podem ficar grandes — limite para caber em A4 portrait */
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
