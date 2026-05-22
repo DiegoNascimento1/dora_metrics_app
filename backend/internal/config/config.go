@@ -27,6 +27,19 @@ type Config struct {
 	// ReliabilityProvider escolhe o backend de SLOs externos.
 	// Aceita: "" / "none" / "datadog" / "sentry" / "prometheus" / "yaml".
 	ReliabilityProvider string
+
+	// AtlassianOAuth carrega config do app OAuth 3LO usado para conectar
+	// tenants ao Jira via UI. Vazio = feature desativada (UI esconde
+	// botão "Conectar Jira"; coletor cai pro REST com env tradicional).
+	AtlassianOAuth AtlassianOAuthConfig
+}
+
+// AtlassianOAuthConfig contém as credenciais do app OAuth (do
+// Developer Console — uma por instalação, NÃO por tenant).
+type AtlassianOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURI  string
 }
 
 // APIConfig descreve o servidor HTTP.
@@ -152,6 +165,11 @@ func Load() (Config, error) {
 			MCPAuthKind:   v.GetString("JIRA_MCP_AUTH_KIND"),
 			MCPToken:      v.GetString("JIRA_MCP_TOKEN"),
 			WebhookSecret: v.GetString("JIRA_WEBHOOK_SECRET"),
+		},
+		AtlassianOAuth: AtlassianOAuthConfig{
+			ClientID:     v.GetString("ATLASSIAN_OAUTH_CLIENT_ID"),
+			ClientSecret: v.GetString("ATLASSIAN_OAUTH_CLIENT_SECRET"),
+			RedirectURI:  v.GetString("ATLASSIAN_OAUTH_REDIRECT_URI"),
 		},
 	}
 

@@ -31,11 +31,24 @@ type Handlers struct {
 	Asynq   *asynq.Client
 	Windows []int // janelas em dias que recalculamos (ex: [7, 30, 90])
 
-	// Configuração do coletor Jira via Atlassian Rovo MCP.
-	// Quando JiraMCPToken != "", o coletor usa MCPSource com fallback
-	// automático para REST. Vazio = REST direto (default seguro).
+	// Coletor Jira via Atlassian Rovo MCP.
+	// Quando JiraMCPToken != "", usa MCPSource com fallback REST.
+	// JiraMCPURL vazio = endpoint oficial https://mcp.atlassian.com/v1/mcp.
 	JiraMCPURL   string
 	JiraMCPToken string
+
+	// AtlassianOAuth (opcional): quando configurado, o coletor PREFERE
+	// usar o access_token gerenciado por tenant (renovado automatica-
+	// mente via refresh_token) em vez do JIRA_MCP_TOKEN estático.
+	// Plugado por cmd/worker. Pode ficar nil.
+	AtlassianOAuth AtlassianOAuthService
+}
+
+// AtlassianOAuthService é a interface mínima que o coletor precisa.
+// Implementada por internal/integrations/atlassian.Service — declarada
+// como interface aqui para evitar import circular.
+type AtlassianOAuthService interface {
+	AccessToken(ctx context.Context, tenantID uuid.UUID) (string, error)
 }
 
 // Register associa os handlers a um asynq.ServeMux.
@@ -671,23 +684,42 @@ func (h *Handlers) HandleCollectJira(ctx context.Context, task *asynq.Task) erro
 		return fmt.Errorf("resolve jira email: %w", err)
 	}
 
-	// Escolha do coletor Jira:
-	//   - Se JIRA_MCP_TOKEN estiver configurado, usa MCPSource
-	//     (Atlassian Rovo MCP em mcp.atlassian.com/v1/mcp) com
-	//     RESTSource como fallback automático em caso de erro.
-	//   - Caso contrário, REST direto.
-	// O MCP é o caminho recomendado quando a infra de OAuth do cliente
-	// está pronta; REST funciona com Basic auth (email + API token) e
-	// é o default seguro.
+	// Escolha do coletor Jira, em ordem de preferência:
+	//   1. AtlassianOAuth (token gerenciado por tenant, renovado auto)
+	//      — usuário conectou via UI OAuth 3LO.
+	//   2. JIRA_MCP_TOKEN estático do env — útil em CI/dev.
+	//   3. RESTSource direto com Basic auth (email + API token).
+	// Sempre que MCP é escolhido, RESTSource fica como fallback
+	// automático: se o MCP falhar, a coleta continua via REST sem
+	// perder dados.
 	rest := jira.NewRESTSource(jiraInstance.BaseUrl, email, apiToken)
 	var source jira.Source = rest
-	if h.JiraMCPToken != "" {
+
+	mcpToken := ""
+	tokenSource := ""
+	if h.AtlassianOAuth != nil {
+		if tok, err := h.AtlassianOAuth.AccessToken(ctx, project.TenantID); err == nil && tok != "" {
+			mcpToken = tok
+			tokenSource = "oauth-3lo"
+		} else if err != nil {
+			log.Debug().Err(err).Str("project_id", project.ID.String()).
+				Msg("atlassian OAuth: token não disponível, tentando fallback")
+		}
+	}
+	if mcpToken == "" && h.JiraMCPToken != "" {
+		mcpToken = h.JiraMCPToken
+		tokenSource = "env-static"
+	}
+	if mcpToken != "" {
 		mcpURL := h.JiraMCPURL
 		if mcpURL == "" {
 			mcpURL = "https://mcp.atlassian.com/v1/mcp"
 		}
-		source = jira.NewMCPSource(mcpURL, h.JiraMCPToken).WithFallback(rest)
-		log.Debug().Str("project_id", project.ID.String()).Msg("jira coletor: MCP primary + REST fallback")
+		source = jira.NewMCPSource(mcpURL, mcpToken).WithFallback(rest)
+		log.Debug().
+			Str("project_id", project.ID.String()).
+			Str("token_source", tokenSource).
+			Msg("jira coletor: MCP primary + REST fallback")
 	}
 
 	// Janela JQL:

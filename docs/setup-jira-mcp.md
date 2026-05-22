@@ -1,167 +1,186 @@
-# Conectar ao MCP do Jira (Atlassian Rovo)
+# Conectar ao Jira (Atlassian Rovo MCP)
 
-Guia operacional para habilitar a coleta Jira via **MCP** em vez de REST.
+Há **3 caminhos**, em ordem de preferência:
 
-> **TL;DR:** o coletor escolhe MCP quando `JIRA_MCP_TOKEN` está
-> configurado; senão cai pra REST direto. Não é "ou um ou outro" no
-> código — o `MCPSource` já vem com fallback automático para o
-> `RESTSource`, então mesmo em falha do MCP a coleta continua.
+1. **OAuth 3LO via UI** — admin clica "Conectar Jira" em Settings,
+   autoriza no Atlassian, tokens ficam criptografados no servidor e
+   renovados automaticamente. **É o caminho recomendado.**
+2. **JIRA_MCP_TOKEN via env** — Bearer estático no `.env`. Útil em
+   CI/dev sem UI.
+3. **REST com Basic auth** (email + API token) — sempre ativo como
+   fallback automático se MCP falhar.
 
-## Arquitetura do que entregamos
+O coletor escolhe na ordem acima. Não é "ou/ou": o MCP tem fallback
+automático para REST se algo der errado, então a coleta não para.
 
-```
-┌──────────────────────────┐
-│  collector handler       │
-│  (cmd/worker)            │
-└──────────┬───────────────┘
-           │
-           │  if JIRA_MCP_TOKEN != ""
-           ▼
-┌──────────────────────────┐    error  ┌─────────────────────────┐
-│  MCPSource               │──────────►│  RESTSource (fallback)  │
-│  internal/collector/jira │           │  /rest/api/3/search/jql │
-└──────────┬───────────────┘           └─────────────────────────┘
-           │  JSON-RPC tools/call
-           ▼
-┌──────────────────────────┐
-│  mcp.atlassian.com/v1/mcp│
-│  tool: searchJiraIssuesU │
-│        singJql           │
-└──────────────────────────┘
-```
+## 1) OAuth 3LO via UI (recomendado)
 
-Código relevante:
+### 1.1 Cadastrar o app uma vez no Atlassian Developer Console
 
-- `backend/internal/mcp/client/atlassian.go` — cliente HTTP/JSON-RPC
-  do MCP genérico
-- `backend/internal/collector/jira/source.go` — `MCPSource`, `RESTSource`,
-  `WithFallback()`
-- `backend/internal/collector/handlers.go` — escolhe MCP vs REST com
-  base em `JIRA_MCP_TOKEN`
+Você só precisa fazer isso **uma vez por instalação** do DORA Metrics.
+As credenciais do app servem para todos os tenants — o que muda é o
+usuário (Atlassian account) que autoriza.
 
-## Passo a passo
-
-### 1. Obter um Bearer Token para o Atlassian Rovo MCP
-
-O servidor oficial é `https://mcp.atlassian.com/v1/mcp` e usa
-**OAuth 2.1** em produção. Para o MVP, o nosso cliente aceita um
-Bearer estático — qualquer um dos abaixo funciona:
-
-**Opção A — Token OAuth (recomendado quando você tiver o app cadastrado):**
-
-1. Acessar [Atlassian Developer Console](https://developer.atlassian.com/console/myapps/).
-2. Criar um app OAuth 2.0 (3LO) ou usar um existente.
-3. Adicionar os scopes:
+1. Acesse <https://developer.atlassian.com/console/myapps/>
+2. Crie um app OAuth 2.0 (3LO).
+3. Em **Permissions**, adicione os scopes:
    - `read:jira-work`
    - `read:jira-user`
-4. Completar o flow OAuth uma vez (ex: via `curl` ou Postman) e
-   armazenar o `access_token` final.
-5. Esse access_token é seu `JIRA_MCP_TOKEN`.
+   - `offline_access` (necessário para refresh tokens)
+4. Em **Authorization > OAuth 2.0 (3LO)**, configure o callback URL:
+   ```
+   https://seu-dora.example.com/api/v1/integrations/atlassian/callback
+   ```
+   (em dev: `http://localhost:8080/api/v1/integrations/atlassian/callback`)
+5. Copie **Client ID** e **Client Secret**.
 
-**Opção B — Pessoal/dev:** seu próprio Atlassian Account Token
-> Atlassian permite gerar tokens pessoais para o Rovo MCP em alguns
-> tenants beta — verifique se aparece no seu admin. Se aparecer, use
-> esse token diretamente.
+### 1.2 Gerar chave de criptografia
 
-**Opção C — Pular tudo:** não setar `JIRA_MCP_TOKEN`. O coletor cai
-para REST e segue funcionando (já está configurado hoje).
+Tokens OAuth são guardados criptografados (AES-256-GCM) no Postgres.
+Gere a chave master:
 
-### 2. Configurar as variáveis de ambiente
+```bash
+openssl rand -base64 32
+```
 
-No `.env` do projeto (ou no orquestrador de container):
+### 1.3 Setar env vars no backend
+
+No `.env`:
 
 ```env
-# URL padrão do MCP Atlassian Cloud (default — pode omitir).
-JIRA_MCP_URL=https://mcp.atlassian.com/v1/mcp
+# Credenciais do app OAuth (NÃO confundir com tokens de usuário).
+ATLASSIAN_OAUTH_CLIENT_ID=abcdef123456
+ATLASSIAN_OAUTH_CLIENT_SECRET=xyz...
+ATLASSIAN_OAUTH_REDIRECT_URI=http://localhost:8080/api/v1/integrations/atlassian/callback
 
-# Token Bearer obtido no passo 1. Vazio = usa REST.
-JIRA_MCP_TOKEN=seu-token-aqui
+# Chave master para AES-256-GCM dos tokens. Tratar como secret.
+OAUTH_ENCRYPTION_KEY=<saída do openssl rand -base64 32>
+```
 
-# Mantenha o JIRA_API_TOKEN também — ele é o fallback automático
-# quando o MCP retornar erro.
+Subir tudo:
+
+```bash
+docker compose --profile full up -d
+```
+
+### 1.4 Conectar pela UI
+
+1. Acesse `http://localhost:4200/settings`.
+2. No card **"Conectar Jira (Atlassian Rovo)"**, clique no botão
+   **Conectar Jira**.
+3. Você é redirecionado para `auth.atlassian.com` — autorize o app.
+4. Volta para `/settings?atlassian=connected` mostrando site, cloudId,
+   scopes e quando o token expira.
+
+A partir desse momento o coletor usa os tokens daquele tenant. O
+worker renova automaticamente antes de expirar (margem de 5min).
+
+### 1.5 Validar
+
+```bash
+# Status pela API:
+curl -H "X-Tenant-Slug: acme" \
+     http://localhost:8080/api/v1/integrations/atlassian/status
+
+# Disparar coleta imediata e ver qual fonte usou:
+docker compose run --rm cli collect now --project <UUID>
+docker compose logs worker --tail=200 | grep "jira coletor"
+# → token_source=oauth-3lo (se a conexão está ativa)
+# → token_source=env-static (se caiu pra JIRA_MCP_TOKEN)
+```
+
+### 1.6 Desconectar
+
+Botão "Desconectar" em Settings ou via API:
+
+```bash
+curl -X DELETE -H "X-Tenant-Slug: acme" \
+     http://localhost:8080/api/v1/integrations/atlassian/connection
+```
+
+Os tokens são apagados do DB. A coleta cai automaticamente para REST
+(se `JIRA_API_TOKEN` configurado) ou para erro até alguém reconectar.
+
+## 2) JIRA_MCP_TOKEN via env (sem UI)
+
+Para CI/dev sem login interativo, basta colar um Bearer no `.env`:
+
+```env
+JIRA_MCP_TOKEN=<access_token>
+JIRA_MCP_URL=https://mcp.atlassian.com/v1/mcp  # default, pode omitir
+```
+
+Útil quando você obtém o token via outro meio (Postman, curl pro flow
+OAuth). O coletor usa esse token se não houver conexão OAuth no DB.
+
+## 3) REST direto (fallback automático)
+
+Mantenha sempre configurado — é o que salva quando o MCP falha:
+
+```env
+JIRA_BASE_URL=https://acme.atlassian.net
 JIRA_EMAIL=você@empresa.com
 JIRA_API_TOKEN=ATATT3xFfGF0...
-JIRA_BASE_URL=https://acme.atlassian.net
 ```
 
-> **Por que manter os 2:** se o token MCP expirar (oauth refresh
-> falhar, scope removido, etc), o coletor continua coletando via REST
-> e você recebe o sinal nos logs sem perder dados.
+Gere o `JIRA_API_TOKEN` em <https://id.atlassian.com/manage-profile/security/api-tokens>.
 
-### 3. Subir o worker
-
-```bash
-docker compose --profile full up -d worker
-docker compose logs -f worker | grep -i jira
-```
-
-No log você deve ver:
+## Arquitetura do flow OAuth 3LO
 
 ```
-DBG jira coletor: MCP primary + REST fallback project_id=...
+┌──────────────────────┐         ┌──────────────────────┐
+│  Frontend /settings  │  POST   │  /authorize          │
+│  Card Conectar Jira  ├────────►│  gera state, salva   │
+└──────────┬───────────┘ /az     │  TTL 10min, devolve  │
+           │                     │  authorize URL       │
+           │                     └─────────┬────────────┘
+           │  302 redirect                 │
+           ▼                               │
+┌──────────────────────┐                   │
+│  auth.atlassian.com  │                   │
+│  /authorize          │                   │
+│  user autoriza       │                   │
+└──────────┬───────────┘                   │
+           │  302 com code+state           │
+           ▼                               │
+┌──────────────────────┐                   │
+│  /callback           │  valida state     │
+│                      │  POST /oauth/token│
+│  - consome state     │  → access+refresh │
+│  - exchange code     │                   │
+│  - cifra + persiste  │  AES-256-GCM      │
+│  - redirect pra UI   │  OAUTH_ENCRYPTION │
+└──────────────────────┘  _KEY             │
+
+Em runtime (worker, cada coleta):
+  1. Service.AccessToken(tenant)
+     - se expires < now+5min: refresh + salva
+     - decifra e devolve
+  2. MCPSource(token).WithFallback(REST)
 ```
-
-quando uma coleta de incidents Jira é disparada (a cada 5 min via
-`scan:active_projects` ou imediatamente via `cli collect now`).
-
-### 4. Validar que está usando MCP de verdade
-
-Disparar coleta imediata + grep no log:
-
-```bash
-docker compose run --rm cli collect now --project <UUID>
-docker compose logs worker --tail=200 | grep -E "atlassian-mcp|jira-rest"
-```
-
-- `source=atlassian-mcp` → MCP funcionou.
-- `source=jira-rest` após `atlassian-mcp` → MCP falhou e fallback rodou.
-  Veja o `mcpErr` no log linha imediatamente anterior pra saber por quê
-  (token expirado, scope insuficiente, rate limit, etc).
 
 ## Troubleshooting
 
-| Sintoma | Causa provável | Ação |
+| Sintoma | Causa | Ação |
 |---|---|---|
-| `401 unauthorized` no MCP | Token inválido ou expirou | Renovar token; até lá, REST continua funcionando |
-| `403 forbidden` no MCP | Faltam scopes `read:jira-work` / `read:jira-user` | Atualizar app no developer console |
-| MCP responde mas issues vêm vazias | Conta do token não tem acesso aos projects | Adicionar o app/conta como member dos projects Jira |
-| Coleta para de funcionar | Verifique se `JIRA_EMAIL` + `JIRA_API_TOKEN` ainda estão setados — o fallback REST depende deles | Manter REST sempre configurado |
+| Botão "Conectar Jira" não aparece | `ATLASSIAN_OAUTH_CLIENT_ID` ou `OAUTH_ENCRYPTION_KEY` vazios | Setar env + reiniciar API |
+| Redirect: `?atlassian_error=access_denied` | Usuário negou no Atlassian | Tentar novamente |
+| Redirect: `?atlassian_error=oauth_failed` | Code expirou (state TTL 10min) ou client_id errado | Verificar logs: `docker compose logs api \| grep atlassian` |
+| `connected: true` mas `lastRefreshError` populado | Refresh token expirou ou foi revogado no Atlassian | Reconectar (Desconectar → Conectar Jira) |
+| Tokens não decriptam após reiniciar | `OAUTH_ENCRYPTION_KEY` mudou | Não mudar a chave em produção; usuários precisam reconectar |
+| Coletor não usa OAuth (log `token_source=env-static`) | Conexão DB não existe pro tenant ou refresh falhou | Confirmar `getAtlassianStatus` connected=true |
 
-## OAuth 2.1 completo (refresh automático)
+## Rotação da OAUTH_ENCRYPTION_KEY
 
-Está fora do MVP. O `MCPSource` atual aceita só Bearer estático. Para
-refresh automático, o roadmap futuro é:
-
-1. Adicionar campo `oauth_refresh_token` em `platform.source_instance`.
-2. Background job que renova o `access_token` antes do `expires_in`.
-3. Trocar `JIRA_MCP_TOKEN` (env) por leitura via `secret.Provider`
-   apontando para o token rotacionado.
-
-Hoje, se você gera o token uma vez por mês e atualiza o env, está
-coberto para a maioria dos casos. Para Cloud com refresh < 24h,
-escrever um wrapper externo (cron) que regenere o token e reinicie o
-worker é o caminho mais simples.
-
-## Validar credenciais sem rodar o worker
-
-CLI tem comando próprio:
-
-```bash
-docker compose run --rm cli secrets check
-```
-
-Lista todos os `auth_ref` das source-instances e verifica se o
-provider corrente consegue resolver. Para rotação:
-
-```bash
-docker compose run --rm cli secrets rotate \
-  --tenant acme --source jira-prod --new-ref JIRA_MCP_TOKEN_V2
-```
+Mudar a chave invalida todos os tokens guardados. Hoje: trocar a chave
+→ todas as conexões precisam ser **refeitas pela UI**. Não há perda de
+dados (só do token, que é descartável); usuários apenas refazem o flow
+OAuth. Rotação com 2 chaves simultâneas é roadmap futuro.
 
 ## Referências
 
+- [Atlassian OAuth 2.0 (3LO)](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/)
 - [Atlassian Rovo MCP server](https://www.atlassian.com/blog/announcements/remote-mcp-server)
 - [Model Context Protocol spec](https://modelcontextprotocol.io)
-- [Atlassian OAuth 2.0 (3LO) docs](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/)
-- [ADR 0003 — escolha de stack do MCP server](adr/0003-mcp-server-stack.md)
-- Código: [internal/mcp/client/atlassian.go](../backend/internal/mcp/client/atlassian.go), [internal/collector/jira/source.go](../backend/internal/collector/jira/source.go)
+- Código: [internal/integrations/atlassian/](../backend/internal/integrations/atlassian/), [internal/mcp/client/atlassian.go](../backend/internal/mcp/client/atlassian.go)
+- ADR: [docs/adr/0003-mcp-server-stack.md](adr/0003-mcp-server-stack.md)

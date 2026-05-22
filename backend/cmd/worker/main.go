@@ -17,6 +17,7 @@ import (
 
 	"github.com/dora-metrics-app/backend/internal/collector"
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/integrations/atlassian"
 	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/secret"
 	"github.com/dora-metrics-app/backend/internal/storage"
@@ -69,6 +70,24 @@ func main() {
 		Windows:      []int{7, 30, 90},
 		JiraMCPURL:   cfg.Jira.MCPURL,
 		JiraMCPToken: cfg.Jira.MCPToken,
+	}
+
+	// Atlassian OAuth 3LO opcional — quando configurado, o coletor
+	// prefere usar tokens por-tenant renovados automaticamente via UI.
+	if cfg.AtlassianOAuth.ClientID != "" && cfg.AtlassianOAuth.ClientSecret != "" {
+		cipher, err := atlassian.NewCipherFromEnv()
+		if err != nil {
+			log.Warn().Err(err).Msg("atlassian OAuth: OAUTH_ENCRYPTION_KEY ausente — usando só env JIRA_MCP_TOKEN")
+		} else {
+			oauthCfg := &atlassian.OAuthConfig{
+				ClientID:     cfg.AtlassianOAuth.ClientID,
+				ClientSecret: cfg.AtlassianOAuth.ClientSecret,
+				RedirectURI:  cfg.AtlassianOAuth.RedirectURI,
+				Scopes:       []string{"read:jira-work", "read:jira-user", "offline_access"},
+			}
+			handlers.AtlassianOAuth = atlassian.NewService(db, cipher, oauthCfg)
+			log.Info().Msg("atlassian OAuth 3LO ativo no coletor (tokens por tenant)")
+		}
 	}
 
 	srv := asynq.NewServer(

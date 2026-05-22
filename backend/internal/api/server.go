@@ -11,6 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/integrations/atlassian"
 	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/reliability"
 	"github.com/dora-metrics-app/backend/internal/storage"
@@ -23,6 +24,7 @@ type Server struct {
 	db          *storage.Pool
 	asynq       *asynq.Client
 	reliability reliability.Provider
+	atlassian   *atlassian.Service
 	mux         *chi.Mux
 }
 
@@ -39,7 +41,38 @@ func NewServer(cfg config.Config, db *storage.Pool, asynqClient *asynq.Client) *
 		relProvider = reliability.NoopProvider{}
 	}
 
-	s := &Server{cfg: cfg, db: db, asynq: asynqClient, reliability: relProvider, mux: chi.NewRouter()}
+	// Atlassian OAuth — opcional. Sem CLIENT_ID/SECRET, o feature fica
+	// desativado (status endpoint devolve available=false; UI esconde
+	// o botão Connect).
+	var atlSvc *atlassian.Service
+	if cfg.AtlassianOAuth.ClientID != "" && cfg.AtlassianOAuth.ClientSecret != "" {
+		cipher, cipherErr := atlassian.NewCipherFromEnv()
+		oauthCfg := &atlassian.OAuthConfig{
+			ClientID:     cfg.AtlassianOAuth.ClientID,
+			ClientSecret: cfg.AtlassianOAuth.ClientSecret,
+			RedirectURI:  cfg.AtlassianOAuth.RedirectURI,
+			Scopes: []string{
+				"read:jira-work",
+				"read:jira-user",
+				"offline_access",
+			},
+		}
+		if oauthCfg.RedirectURI == "" {
+			oauthCfg.RedirectURI = "http://localhost:8080/api/v1/integrations/atlassian/callback"
+		}
+		if cipherErr != nil {
+			log.Warn().Err(cipherErr).Msg("atlassian OAuth: OAUTH_ENCRYPTION_KEY ausente — feature desligado")
+		} else {
+			atlSvc = atlassian.NewService(db, cipher, oauthCfg)
+		}
+	}
+
+	s := &Server{
+		cfg: cfg, db: db, asynq: asynqClient,
+		reliability: relProvider,
+		atlassian:   atlSvc,
+		mux:         chi.NewRouter(),
+	}
 	s.routes()
 	return s
 }
@@ -108,6 +141,13 @@ func (s *Server) routes() {
 		r.Get("/reliability/slos", s.handleReliabilitySLOs())
 		r.Get("/projects/{projectId}/predict", s.handleProjectPredict())
 		r.Get("/teams/{teamId}/predict", s.handleTeamPredict())
+
+		// Atlassian OAuth 3LO — admin conecta a conta Jira via UI.
+		r.Post("/integrations/atlassian/authorize", s.handleAtlassianAuthorize())
+		r.Get("/integrations/atlassian/callback", s.handleAtlassianCallback())
+		r.Get("/integrations/atlassian/status", s.handleAtlassianStatus())
+		r.Delete("/integrations/atlassian/connection", s.handleAtlassianDisconnect())
+
 		r.Post("/projects/{projectId}/unassign-team", s.handleUnassignProjectFromTeam())
 
 		r.Get("/alert-rules", s.handleListAlertRules())
