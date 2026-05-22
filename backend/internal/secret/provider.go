@@ -56,7 +56,7 @@ func New(kind string) (Provider, error) {
 	case "aws-secrets-manager":
 		return NewAWSSecretsManagerProvider()
 	case "azure-key-vault":
-		return nil, errors.New("secret provider not implemented yet: " + kind)
+		return NewAzureKeyVaultProvider()
 	default:
 		return nil, errors.New("unknown secret provider: " + kind)
 	}
