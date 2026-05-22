@@ -89,6 +89,8 @@ func (s *Server) routes() {
 		r.Get("/teams/{teamId}/timeseries", s.handleTeamTimeseries())
 		r.Get("/teams/{teamId}/digest", s.handleTeamDigest())
 		r.Get("/projects/{projectId}/digest", s.handleProjectDigest())
+
+		r.Get("/benchmarks", s.handleBenchmarks())
 		r.Post("/projects/{projectId}/unassign-team", s.handleUnassignProjectFromTeam())
 
 		r.Get("/alert-rules", s.handleListAlertRules())

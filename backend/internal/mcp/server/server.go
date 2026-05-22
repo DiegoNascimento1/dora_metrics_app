@@ -243,6 +243,12 @@ func (s *Server) handleResourcesList(req rpcRequest) rpcResponse {
 					"description": "Definições dos tiers Elite/High/Medium/Low conforme DORA Report 2024.",
 					"mimeType":    "application/json",
 				},
+				{
+					"uri":         "dora://benchmarks",
+					"name":        "Industry benchmarks (DORA Report 2024)",
+					"description": "Percentis p50/p75/p90 da indústria para comparação anônima.",
+					"mimeType":    "application/json",
+				},
 			},
 		},
 	}
@@ -267,6 +273,23 @@ func (s *Server) handleResourcesRead(ctx context.Context, req rpcRequest) rpcRes
 						"uri":      p.URI,
 						"mimeType": "application/json",
 						"text":     `{"thresholds":{"df":{"elite":1.0,"high":0.143,"medium":0.033},"lt_seconds":{"elite":3600,"high":604800,"medium":2592000},"cfr":{"elite":0.05,"high":0.10,"medium":0.20},"mttr_seconds":{"elite":3600,"high":86400,"medium":604800}}}`,
+					},
+				},
+			},
+		}
+	case "dora://benchmarks":
+		// Snapshot do DORA Report 2024 (mesmo conteúdo do endpoint REST
+		// /api/v1/benchmarks). Hardcoded aqui para que o MCP server não
+		// dependa de import circular do api/.
+		return rpcResponse{
+			Jsonrpc: "2.0",
+			ID:      req.ID,
+			Result: map[string]any{
+				"contents": []map[string]any{
+					{
+						"uri":      p.URI,
+						"mimeType": "application/json",
+						"text":     `{"source":"DORA Report 2024","industryAverages":{"p50":{"deploymentFrequencyPerDay":0.5,"leadTimeForChangesSeconds":259200,"changeFailureRate":0.12,"mttrSeconds":43200},"p75":{"deploymentFrequencyPerDay":2.5,"leadTimeForChangesSeconds":86400,"changeFailureRate":0.08,"mttrSeconds":14400},"p90":{"deploymentFrequencyPerDay":8.0,"leadTimeForChangesSeconds":14400,"changeFailureRate":0.04,"mttrSeconds":3600}}}`,
 					},
 				},
 			},
