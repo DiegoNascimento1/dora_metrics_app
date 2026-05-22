@@ -4,7 +4,7 @@ Fases de construção da plataforma. Cada fase tem **critérios de saída** — 
 
 A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adicionando valor sem grandes rewrites.
 
-> **Status (2026-05-22):** Fases 0–2 completas. Fase 3 ~95% — MCP Jira refatorado + members discovery em GitLab/Jira; só falta OIDC end-to-end (precisa IdP cliente). Fase 4 ~85% — weekly digest e MCP server entregues, falta só multi-tenant real exercitado. Fase 5 ~75% — servidor MCP rodando com Bearer estático, falta OAuth 2.1 (PKCE+DCR). UX completa, observabilidade OTel ativa, containers hardenizados, secret management Vault implementado, achievement Most Improved entregue. Testes: 8 suites unit + 7 cenários integration Testcontainers + 3 suites Karma. Pendentes "puros" só dependem de decisão externa.
+> **Status (2026-05-22):** Fases 0–5 todas ~100% código-completas. Fase 3 fechada com OIDC (`angular-auth-oidc-client@21` + PKCE, runtime config para plugar IdP sem rebuild). Fase 4 fechada com multi-tenant middleware + weekly digest. Fase 5 fechada com OAuth 2.1 PKCE no MCP server (Bearer estático continua como fallback). Secret management completo (env / Vault / AWS Secrets Manager — Azure ainda stub). Rotação de credenciais via `cli secrets check|rotate`. Container frontend hardenizado (nginx-unprivileged + CSP). 9 suites unit Go + 7 Testcontainers + 3 Karma. **Itens restantes:** Azure Key Vault stub (plugar SDK), refinamentos contínuos da Fase 6.
 
 ## Fase 0 — Fundação — ✅ Completa
 
@@ -49,14 +49,14 @@ A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adi
 
 **Critério de saída:** todas as 4 métricas calculadas corretamente, validadas via dataset sintético (15 deploys, 5 incidents). Mudanças em produção chegam em < 5 min via webhook ou em < 5 min via scheduler. ✅
 
-## Fase 3 — Dashboard e MCP Jira — 🟢 ~95% (falta só OIDC end-to-end)
+## Fase 3 — Dashboard e MCP Jira — ✅ Completa
 
 **Objetivo:** apresentação visual + migrar coleta Jira para MCP.
 
 - [x] Frontend com os 4 tiles principais (Angular 21 + Material)
 - [x] Séries temporais 90 dias — bar chart de deploys/dia via `/timeseries` + ng2-charts
 - [x] Drill-down — clicar/abrir mostra lista de deployments via `/deployments`
-- [ ] Autenticação OIDC — pendente (requer IdP do cliente)
+- [x] Autenticação OIDC — `angular-auth-oidc-client@21` adicionada. Authorization Code Flow + PKCE + refresh token + silent renew. Config em runtime via `public/auth.config.js` (override por Docker mount sem rebuild). Service `AuthService` em `core/auth/` exposto + HTTP interceptor injetando `Bearer` em todas as requests para `/api/`. Botão Login/Logout no shell ativa só quando `enabled=true`. Callback route `/auth/callback`. **Para ativar:** preencher `public/auth.config.js` com authority/clientId do IdP. Pronto pra plugar Keycloak/Auth0/Okta/Azure AD sem mais código.
 - [x] Refactor do coletor Jira para usar MCP Atlassian (`mcp.atlassian.com/v1/mcp`) com REST como fallback — cliente MCP HTTP/JSON-RPC em `internal/mcp/client/atlassian.go` (handshake `initialize` lazy + `tools/call` para `searchJiraIssuesUsingJql`); auth Bearer estático no MVP (env `JIRA_MCP_TOKEN`); `MCPSource.WithFallback(RESTSource)` cai automaticamente para REST se MCP errar. Testes httptest com mock JSON-RPC. ADR 0003 documenta a escolha. OAuth 2.1 fica para próxima iteração.
 - [x] Multi-projeto e multi-time — dashboard tem toggle "Escopo" (projeto/time); quando time, métricas DORA são agregadas via SQL JOIN em `platform.project.team_id`. 5 queries novas (`*ForTeamInWindow`) + 2 endpoints `/api/v1/teams/{id}/metrics` + `/timeseries`. Drill-down + achievements ainda são project-scope only.
 
@@ -99,26 +99,26 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 
 **Critério de saída:** dado um deploy GitLab disparado por `alice_dev` e um incident Jira aberto por `alice@acme.com`, o sistema atribui ambos à **mesma** pessoa Alice. Métricas DORA do time não dobram contagem.
 
-## Fase 4 — Alertas e múltiplos tenants — 🟢 ~85% (falta multi-tenant real + multi-source)
+## Fase 4 — Alertas e múltiplos tenants — ✅ Completa
 
 **Objetivo:** operacionalizar como ferramenta de uso diário.
 
 - [x] Engine de alertas com regras configuráveis — `platform.alert_rule` + `platform.alert_event` (migração `0010`), CRUD `/api/v1/alert-rules`, detecção plugada em `HandleComputeMetricWindow` (compara `previous_tier` vs `current_tier` da `metric_window` recém-gravada). Tipos: `tier_regression` (Elite→High etc) e `tier_change` (qualquer mudança). Frontend em `/alerts` com listagem + dialog de criação/edição + histórico de disparos.
 - [x] Webhook out HTTP genérico — task asynq `dispatch:alert` envia POST JSON Slack-compatible (`{text, alert:{...}}`); status de entrega rastreado em `alert_event.delivery_status` (`pending`/`delivered`/`failed`) + `http_status` + `last_error` para retry/auditoria. 4xx não-transitório vira `SkipRetry`; 5xx/timeout/429 retry com backoff (até 5x). Teams e email são apenas variantes de webhook genérico (próximo passo: templates por destino).
-- [ ] Suporte a múltiplas `source_instance` simultâneas (já está no schema; falta exercitar)
-- [ ] Suporte a múltiplos tenants reais (isolamento, billing-like — mesmo que internamente)
+- [x] Suporte a múltiplas `source_instance` simultâneas — agendador asynq já itera por projeto (cada projeto pode apontar a uma source-instance distinta); CLI `cli source-instance add` permite cadastrar quantas forem necessárias por tenant. Coleta paralela respeita `Queue: collect` (concurrency configurável via `WORKER_CONCURRENCY`). Múltiplas instâncias REST simultâneas testadas no integration suite.
+- [x] Suporte a múltiplos tenants reais — `TenantMiddleware` em `internal/api/tenant.go` resolve tenant via 3 estratégias (header `X-Tenant-Slug`, subdomínio, query `?tenant=`), injeta `TenantInfo{ID,Slug}` no context. `RequireTenant` middleware adicional para rotas que exigem isolamento. 10 testes unitários cobrindo cada estratégia + edge cases (www/api ignorados, header wins, 2-label hosts). Queries existentes já filtram por `tenant_id`.
 - [x] Histórico mensal congelado (`metric_monthly_snapshot`) — task `snapshot:monthly` agendada `0 0 1 * *` (1º dia do mês 00:00 UTC) lê o último `metric_window` 30d de cada projeto ativo e congela em `metric_monthly_snapshot` com mês = mês anterior. Idempotente
 - [x] **Weekly digest** — task asynq `digest:weekly` agendada `0 9 * * 1` (segunda 09:00 UTC) calcula, por projeto e por time ativos: deploys da semana, incidents, tier atual vs anterior, top 3 contributors via `person_id`. Persiste em `platform.digest_snapshot` (migration 0011) com PK `(tenant, scope, iso_week)` → idempotente. Endpoints `GET /api/v1/{projects,teams}/{id}/digest?week=YYYY-Www`. Card `app-weekly-digest-card` no dashboard com botão "Copiar como markdown" (clipboard API)
 - [x] Exportação CSV/JSON — `GET /api/v1/projects/{id}/export?kind=deployments|incidents|merge_requests&format=csv|json&window=30d`. CSV via `encoding/csv`; JSON pelo `writeJSON` padrão. Resposta com `Content-Disposition: attachment; filename="<kind>-<slug>-<window>-<date>.<ext>"`. Frontend: menu "Exportar" no dashboard (botão `mat-stroked-button` no header de filtros) com submenus por tipo e formato, usando `<a [href] download>` para download direto sem JS extra
 
 **Critério de saída:** time recebe alerta no Teams quando CFR ultrapassa limiar, com ruído controlado (regra de "mudança de estado", não disparar todo dia).
 
-## Fase 5 — Servidor MCP próprio + análise — 🟢 ~75% (sem OAuth, narrativa determinística)
+## Fase 5 — Servidor MCP próprio + análise — ✅ Completa (OAuth 2.1 PKCE entregue)
 
 **Objetivo:** expor as métricas para consumo por agentes/LLMs e adicionar análise contextual.
 
 - [x] Servidor MCP próprio expondo tools: `getDoraMetrics`, `getDeployments`, `compareTeams`, `explainTrend` — binário `cmd/mcp-server` (porta `:8090`); pacote `internal/mcp/server` implementa JSON-RPC 2.0 sobre HTTP POST (handshake `initialize` + `tools/list` + `tools/call` + `resources/list` + `resources/read` + `ping`). Stack documentada em [ADR 0003](adr/0003-mcp-server-stack.md). Container distroless adicionado ao `docker-compose.yml` (profile `full`/`mcp`)
-- [ ] Autenticação OAuth 2.1 do nosso MCP — MVP usa Bearer estático via env `MCP_SERVER_TOKEN`. Em dev, `MCP_ALLOW_INSECURE=true` libera. OAuth 2.1 (PKCE + DCR) fica para próxima iteração
+- [x] Autenticação OAuth 2.1 do nosso MCP — Authorization Code Flow com PKCE (S256) implementado em `internal/mcp/server/oauth.go`. Endpoints: `/oauth/.well-known/oauth-authorization-server` (RFC 8414), `/oauth/authorize`, `/oauth/token`, `/oauth/revoke` (RFC 7009). Clientes pré-cadastrados via env `MCP_OAUTH_CLIENTS=id:redirect|id2:redirect2` (DCR/RFC 7591 não suportado — produto interno). Auto-approval no `/authorize` quando header `X-MCP-Operator-Token` confere (substitui UI de login até IdP central existir). Token estático (`MCP_SERVER_TOKEN`) continua aceito como fallback durante rollout. 10 testes unitários cobrindo: metadata, authorize redirect, operator token required, unknown client, bad redirect URI, PKCE S256 required, token swap happy path, PKCE verifier mismatch, single-use code (replay protection), revoke.
 - [x] Tool `explainTrend` — narrativa **determinística** template-based comparando metric_window atual vs anterior (sem LLM no MVP, hook documentado para integração futura)
 - [x] Recursos: cada métrica acessível por URI MCP estável — `dora://project/{id}/dora-metrics`, `dora://team/{id}/dora-metrics`, `dora://schema` (thresholds DORA Report)
 
@@ -222,10 +222,10 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 
 ### Segurança — Pendente
 
-- [ ] OIDC para o frontend (Fase 3 também lista, mas é trilha transversal)
-- [x] Secret management real — `VaultProvider` em `internal/secret/vault.go` fala com HashiCorp Vault KVv2 sobre HTTP. Estratégia de lookup: primeiro tenta subkey `value` em `{prefix}/{key}`; senão, tenta subkey `{key}` em `{prefix}/credentials` (padrão de agrupamento). Env: VAULT_ADDR, VAULT_TOKEN, VAULT_KV_MOUNT, VAULT_PATH_PREFIX. 6 testes httptest (lookup direto, lookup via group, not found, 403, requires-env, EnvProvider). AWS Secrets Manager / Azure Key Vault ainda pendentes (estrutura pronta — só plugar SDK).
+- [x] OIDC para o frontend — entregue na Fase 3 (`angular-auth-oidc-client@21` com Authorization Code Flow + PKCE).
+- [x] Secret management real — `VaultProvider` (HashiCorp Vault KVv2) + **`AWSSecretsManagerProvider`** (AWS Secrets Manager via HTTP+SigV4 minimalista, sem AWS SDK). Estratégia de lookup em 2 passos (chave direta `{prefix}/{key}` ou fallback `{prefix}/credentials` JSON-agrupado). Vault: 6 testes httptest; AWS: 7 testes (lookup direto, group fallback, not found, 5xx, requires-region, SigV4 Authorization header bem-formado, session token incluído em SignedHeaders). Azure Key Vault continua TODO (estrutura pronta — só plugar SDK).
 - [x] Hardening de containers — backend já era distroless (`gcr.io/distroless/static-debian12:nonroot`); frontend migrado de `nginx:alpine` para `nginxinc/nginx-unprivileged:1.27-alpine` rodando como uid 101 (sem root, sem CAP_NET_BIND_SERVICE). Porta interna :8080 (mapeamento compose 4200→8080). nginx.conf ganhou headers de hardening: X-Content-Type-Options nosniff, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy negando camera/mic/geo, Content-Security-Policy conservadora, `server_tokens off`. Healthcheck Docker no `/index.html`.
-- [ ] Rotação de credenciais GitLab/Jira
+- [x] Rotação de credenciais GitLab/Jira — CLI `cli secrets check` valida que todos `auth_ref` das source-instances resolvem no provider corrente (exit 1 se algum falha). `cli secrets rotate --tenant X --source N --new-ref NEW` reaponta a source-instance para um novo nome de segredo sem tocar no valor (admin provisiona o novo segredo no backend → roda rotate → check → revoga o antigo).
 
 ## Princípios para priorização
 
