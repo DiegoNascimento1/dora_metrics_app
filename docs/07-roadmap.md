@@ -4,7 +4,7 @@ Fases de construção da plataforma. Cada fase tem **critérios de saída** — 
 
 A intenção é ter algo útil **em produção interna** já na Fase 1, e ir adicionando valor sem grandes rewrites.
 
-> **Status (2026-05-22):** Fases 0–5 ✅ Completas. Fase 6 ~60% (Code Review/Pickup Time, benchmarks de indústria, PagerDuty/Opsgenie e anti-gaming entregues; SLO externo e predição em backlog). Secret management completo nos 3 grandes providers (env / Vault / AWS / Azure). Risco "métrica gameada" mitigado. 12 suites unit Go + 7 Testcontainers + 3 Karma. **Pendentes:** apenas itens de produto (DORA Reliability v2 com SLOs externos, predição de degradação) e refinamentos pontuais sem decisão tomada.
+> **Status (2026-05-22):** **Fases 0–6 ✅ todas completas.** Reliability v2 com 4 SLO providers pluggable (Datadog/Sentry/Prometheus+sloth/YAML); predição de degradação via regressão linear (funciona com histórico real OU sintético); novo alert_kind `predicted_regression` proativo. Secret management nos 3 grandes (Vault/AWS/Azure). Risco "métrica gameada" mitigado. 14 suites unit Go + 7 Testcontainers + 3 Karma. **Nenhum item bloqueante pendente** — só backlog livre de refinamentos.
 
 ## Fase 0 — Fundação — ✅ Completa
 
@@ -124,15 +124,15 @@ person_identity             Vínculos com sistemas externos. N por pessoa.
 
 **Critério de saída:** um SRE pergunta ao Claude "como está nosso CFR?" via desktop e recebe resposta com dados reais. Atendido (modo Bearer estático).
 
-## Fase 6 — Métricas auxiliares e refinamentos (contínuo) — 🟢 ~60%
+## Fase 6 — Métricas auxiliares e refinamentos (contínuo) — ✅ Completa
 
 Evolução contínua. Marcações:
 
 - [x] **Code Review Time + Pickup Time** — `internal/calculator/subcomponents.go` decompõe o Lead Time em Pickup (commit → MR open), Review (MR open → merge) e Deploy Lag (merge → deploy). `AggregateLeadTime` calcula medianas. 7 testes unit cobrindo casos completos, parciais, negativos descartados, mediana ímpar/par, nil-tolerant agregação.
 - [x] **Comparação com benchmarks de indústria (anonimizado)** — endpoint REST `GET /api/v1/benchmarks` + resource MCP estável `dora://benchmarks` expõe percentis p50/p75/p90 do DORA Report 2024. Frontend pode dizer "seu projeto está no percentil X" sem agregar dados de outros clientes.
 - [x] **Integração com PagerDuty/Opsgenie para incidentes** — `internal/collector/alert_destinations.go` detecta destino pelo host da webhook_url e adapta o body: PagerDuty Events API v2 (com `dedup_key=event_id` para suprimir duplicatas + `event_action=resolve` em promoções), Opsgenie Alerts API v2 (auth via `GenieKey` no header, `api_key` removido da URL para não vazar). Destino genérico (Slack/Teams) preserva o formato original. 6 testes unit cobrindo detect + payload PagerDuty (severity por tier, resolve em promoção, exige routing_key), Opsgenie (alias dedup, priority P2 para low, tags), e no-op genérico.
-- [ ] DORA Reliability (v2): integração com SLOs externos
-- [ ] Predição: alertar antes de degradação, baseado em sinais antecedentes
+- [x] **DORA Reliability v2** — interface `reliability.Provider` pluggable com 4 backends prontos: **Datadog** (API v1 SLO + history endpoint), **Sentry** (Performance stats_v2 → SLI sintético contra target via env), **Prometheus** (PromQL contra métricas do sloth/Pyrra/OpenSLO), **YAML** (Google SRE-style local file). `New(kind)` dispatch + `NoopProvider` default seguro. Status comum `SLOStatus{name,target,actual,errorBudget,periodDays,status}` exposto via `GET /api/v1/reliability/slos?scope=...` + `GET /api/v1/reliability/info`. Cobertura: 19 testes httptest (Datadog SLO+history+placeholder, Sentry SLI+scope filter, Prometheus query parser, YAML file load+filter+missing dir + helpers + JSON shape).
+- [x] **Predição: alertar antes de degradação** — pacote `internal/prediction` com regressão linear OLS pura (~60 LOC, sem ML lib) sobre histórico de `metric_window`. `Predict(samples)` devolve `slopePerWeek`, `r2`, `direction` (degrading/improving/stable), `confidence` (low/medium/high pelo R²+sample size), `projectedTierIn`, `willBreachInDays` (extrapolação até cair para o próximo tier). Funciona com **histórico real ou sintético** (≥6 amostras). Endpoint `GET /api/v1/{projects,teams}/{id}/predict?lookback=180`. Task asynq `predict:weekly @ 0 10 * * 1` dispara `alert_event` com `kind=predicted_regression` (novo, migration 0012) quando `direction=degrading && confidence>=medium`. Idempotente por (rule, dia). 11 testes cobrindo: histórico insuficiente, degradação clara, improving, stable, filtra insufficient_data, breach projection, rankToTier boundaries, linear regression OLS, R² para série constante.
 
 ## Trilhas transversais
 
