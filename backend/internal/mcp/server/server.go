@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,6 +38,13 @@ type Server struct {
 	tools    []Tool
 	handlers map[string]toolHandler
 	now      func() time.Time // injetável p/ testes
+
+	// OAuth opcional. Quando Enabled(), o servidor aceita Bearer
+	// emitido pelo /oauth/token em vez do token estático. O token
+	// estático continua aceito como fallback (operadores podem
+	// começar com Bearer estático e migrar).
+	oauth *OAuthServer
+	mux   *http.ServeMux
 }
 
 // Tool é a definição declarativa exposta no `tools/list`.
@@ -50,23 +58,39 @@ type Tool struct {
 type toolHandler func(ctx context.Context, args json.RawMessage) (any, error)
 
 // New constrói um Server. Token vazio = sem auth (apenas para testes).
+//
+// Se MCP_OAUTH_CLIENTS estiver configurado, o servidor ativa também o
+// fluxo OAuth 2.1 PKCE — clientes podem obter Bearer tokens dinâmicos
+// pelo endpoint /oauth/token. O token estático continua válido como
+// fallback (decisão pragmática: facilita rollout).
 func New(db *storage.Pool, token string) *Server {
 	s := &Server{
 		db:       db,
 		token:    token,
 		handlers: map[string]toolHandler{},
 		now:      time.Now,
+		mux:      http.NewServeMux(),
 	}
 	s.registerTools()
+
+	if oauth := NewOAuthServer(); oauth.Enabled() {
+		s.oauth = oauth
+		oauth.RegisterRoutes(s.mux)
+	}
 	return s
 }
 
 // ServeHTTP roteia POST /mcp para o dispatcher JSON-RPC. Outros endpoints
-// devolvem 404.
+// devolvem 404 — exceto /oauth/* quando OAuth está habilitado (delegados
+// ao OAuthServer via s.mux).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/healthz" {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/oauth/") {
+		s.mux.ServeHTTP(w, r)
 		return
 	}
 	if r.URL.Path != "/mcp" {
@@ -93,13 +117,27 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) checkAuth(r *http.Request) bool {
-	if s.token == "" {
-		return true
-	}
 	got := r.Header.Get("Authorization")
-	want := "Bearer " + s.token
-	// constant-time para evitar timing oracles.
-	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+
+	// 1. Token estático sempre aceito quando configurado (Bearer fixo).
+	if s.token != "" {
+		want := "Bearer " + s.token
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1 {
+			return true
+		}
+	}
+
+	// 2. OAuth 2.1 — Bearer emitido pelo /oauth/token.
+	if s.oauth != nil {
+		if tok, ok := strings.CutPrefix(got, "Bearer "); ok {
+			if _, _, valid := s.oauth.ValidateToken(tok); valid {
+				return true
+			}
+		}
+	}
+
+	// Token estático vazio E sem OAuth → modo "open" (testes).
+	return s.token == "" && s.oauth == nil
 }
 
 // dispatch resolve o método JSON-RPC pedido. Devolve sempre uma rpcResponse
