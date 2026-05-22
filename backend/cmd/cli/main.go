@@ -109,6 +109,15 @@ func main() {
 		default:
 			die("unknown subcommand: thresholds %s", sub)
 		}
+	case "secrets":
+		switch sub {
+		case "check":
+			secretsCheck(ctx, q, cfg, rest)
+		case "rotate":
+			secretsRotate(ctx, q, rest)
+		default:
+			die("unknown subcommand: secrets %s (use: check | rotate)", sub)
+		}
 	case "people":
 		switch sub {
 		case "backfill":
@@ -682,5 +691,7 @@ Usage:
   cli people create --tenant X --name "Alice Doe" [--email alice@acme.com]
   cli people link --identity UUID --person UUID
   cli people automatch --tenant X
-  cli people propagate [--tenant X]    # backfill author_person_id em MRs/deploys`)
+  cli people propagate [--tenant X]    # backfill author_person_id em MRs/deploys
+  cli secrets check                    # valida que todos auth-refs resolvem no provider
+  cli secrets rotate --source NAME --new-ref NEW_ENV_VAR  # aponta source-instance pra novo segredo`)
 }
