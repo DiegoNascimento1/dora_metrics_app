@@ -23,6 +23,10 @@ type Config struct {
 
 	// SecretProvider escolhe a implementação de secret.Provider.
 	SecretProvider string
+
+	// ReliabilityProvider escolhe o backend de SLOs externos.
+	// Aceita: "" / "none" / "datadog" / "sentry" / "prometheus" / "yaml".
+	ReliabilityProvider string
 }
 
 // APIConfig descreve o servidor HTTP.
@@ -112,9 +116,10 @@ func Load() (Config, error) {
 	v.SetDefault("GITLAB_BASE_URL", "https://gitlab.com")
 
 	cfg := Config{
-		Env:            v.GetString("API_ENV"),
-		LogLevel_:      v.GetString("API_LOG_LEVEL"),
-		SecretProvider: v.GetString("SECRET_PROVIDER"),
+		Env:                 v.GetString("API_ENV"),
+		LogLevel_:           v.GetString("API_LOG_LEVEL"),
+		SecretProvider:      v.GetString("SECRET_PROVIDER"),
+		ReliabilityProvider: v.GetString("RELIABILITY_PROVIDER"),
 		API: APIConfig{
 			HTTPAddr: v.GetString("API_HTTP_ADDR"),
 		},

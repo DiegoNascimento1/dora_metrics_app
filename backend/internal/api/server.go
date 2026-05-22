@@ -12,21 +12,34 @@ import (
 
 	"github.com/dora-metrics-app/backend/internal/config"
 	"github.com/dora-metrics-app/backend/internal/observability"
+	"github.com/dora-metrics-app/backend/internal/reliability"
 	"github.com/dora-metrics-app/backend/internal/storage"
+	"github.com/rs/zerolog/log"
 )
 
 // Server agrega dependências de runtime da API.
 type Server struct {
-	cfg   config.Config
-	db    *storage.Pool
-	asynq *asynq.Client
-	mux   *chi.Mux
+	cfg         config.Config
+	db          *storage.Pool
+	asynq       *asynq.Client
+	reliability reliability.Provider
+	mux         *chi.Mux
 }
 
 // NewServer constrói o servidor com rotas registradas.
 func NewServer(cfg config.Config, db *storage.Pool, asynqClient *asynq.Client) *Server {
 	observability.Register()
-	s := &Server{cfg: cfg, db: db, asynq: asynqClient, mux: chi.NewRouter()}
+
+	// Reliability provider — falha de init não derruba o servidor;
+	// cai pro Noop e a UI mostra "nenhum SLO configurado".
+	relProvider, err := reliability.New(cfg.ReliabilityProvider)
+	if err != nil {
+		log.Warn().Err(err).Str("kind", cfg.ReliabilityProvider).
+			Msg("reliability provider falhou ao inicializar — usando noop")
+		relProvider = reliability.NoopProvider{}
+	}
+
+	s := &Server{cfg: cfg, db: db, asynq: asynqClient, reliability: relProvider, mux: chi.NewRouter()}
 	s.routes()
 	return s
 }
@@ -91,6 +104,10 @@ func (s *Server) routes() {
 		r.Get("/projects/{projectId}/digest", s.handleProjectDigest())
 
 		r.Get("/benchmarks", s.handleBenchmarks())
+		r.Get("/reliability/info", s.handleReliabilityInfo())
+		r.Get("/reliability/slos", s.handleReliabilitySLOs())
+		r.Get("/projects/{projectId}/predict", s.handleProjectPredict())
+		r.Get("/teams/{teamId}/predict", s.handleTeamPredict())
 		r.Post("/projects/{projectId}/unassign-team", s.handleUnassignProjectFromTeam())
 
 		r.Get("/alert-rules", s.handleListAlertRules())
