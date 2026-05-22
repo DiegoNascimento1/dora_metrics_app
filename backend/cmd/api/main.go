@@ -16,6 +16,7 @@ import (
 
 	"github.com/dora-metrics-app/backend/internal/api"
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/storage"
 )
 
@@ -32,6 +33,17 @@ func main() {
 
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// OTel tracing: no-op se OTEL_EXPORTER_OTLP_ENDPOINT estiver vazio.
+	otelShutdown, err := observability.InitTracing(rootCtx, "api")
+	if err != nil {
+		log.Warn().Err(err).Msg("init tracing falhou — seguindo sem tracing")
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = otelShutdown(shutdownCtx)
+	}()
 
 	db, err := storage.NewPool(rootCtx, cfg.Database)
 	if err != nil {
