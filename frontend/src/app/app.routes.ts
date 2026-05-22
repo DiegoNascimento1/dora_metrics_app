@@ -63,6 +63,16 @@ export const routes: Routes = [
       ),
   },
   {
+    // OIDC callback — a lib angular-auth-oidc-client lê os query params
+    // (?code=...&state=...) e finaliza o login automaticamente. O
+    // componente em si só redireciona pro dashboard depois.
+    path: 'auth/callback',
+    loadComponent: () =>
+      import('./features/auth/callback.component').then(
+        (m) => m.AuthCallbackComponent,
+      ),
+  },
+  {
     path: '**',
     redirectTo: 'dashboard',
   },

@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { ThemeService } from './core/theme/theme.service';
+import { AuthService } from './core/auth/auth.service';
 import {
   OnboardingService,
   OnboardingTourComponent,
@@ -64,6 +65,28 @@ import {
       >
         <mat-icon [fontIcon]="theme.isDark() ? 'light_mode' : 'dark_mode' "></mat-icon>
       </button>
+
+      @if (auth.enabled) {
+        @if (auth.isAuthenticated()) {
+          <button
+            mat-icon-button
+            (click)="auth.logout()"
+            [matTooltip]="'Sair (' + auth.username() + ')'"
+            aria-label="Sair"
+          >
+            <mat-icon fontIcon="logout"></mat-icon>
+          </button>
+        } @else {
+          <button
+            mat-icon-button
+            (click)="auth.login()"
+            matTooltip="Entrar"
+            aria-label="Entrar"
+          >
+            <mat-icon fontIcon="login"></mat-icon>
+          </button>
+        }
+      }
     </mat-toolbar>
 
     <main class="container">
@@ -131,11 +154,13 @@ import {
 })
 export class AppComponent {
   protected theme = inject(ThemeService);
+  protected auth = inject(AuthService);
   private tour = inject(OnboardingService);
 
   constructor() {
-    // Inicia o tour na primeira visita (não força se o user já viu).
-    // Aguarda 1 tick para o DOM do dashboard ter renderizado os spotlights.
-    queueMicrotask(() => this.tour.start(false));
+    // Inicializa OIDC primeiro (no-op se desligado), depois liga o tour.
+    this.auth.initialize().subscribe(() => {
+      queueMicrotask(() => this.tour.start(false));
+    });
   }
 }
