@@ -43,12 +43,17 @@ func (e *EnvProvider) Get(_ context.Context, key string) (string, error) {
 //
 // Valores aceitos:
 //   - "env"   → EnvProvider (default)
-//   - "vault" → não implementado ainda (retorna erro)
+//   - "vault" → VaultProvider (HashiCorp Vault KVv2). Requer VAULT_ADDR
+//               + VAULT_TOKEN. Detalhes em vault.go.
+//   - "aws-secrets-manager", "azure-key-vault" → não implementados ainda
+//     (retorna erro). PRs bem-vindos.
 func New(kind string) (Provider, error) {
 	switch kind {
 	case "", "env":
 		return NewEnvProvider(), nil
-	case "vault", "aws-secrets-manager", "azure-key-vault":
+	case "vault":
+		return NewVaultProvider()
+	case "aws-secrets-manager", "azure-key-vault":
 		return nil, errors.New("secret provider not implemented yet: " + kind)
 	default:
 		return nil, errors.New("unknown secret provider: " + kind)
