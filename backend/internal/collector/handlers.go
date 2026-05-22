@@ -30,6 +30,12 @@ type Handlers struct {
 	Secret  secret.Provider
 	Asynq   *asynq.Client
 	Windows []int // janelas em dias que recalculamos (ex: [7, 30, 90])
+
+	// Configuração do coletor Jira via Atlassian Rovo MCP.
+	// Quando JiraMCPToken != "", o coletor usa MCPSource com fallback
+	// automático para REST. Vazio = REST direto (default seguro).
+	JiraMCPURL   string
+	JiraMCPToken string
 }
 
 // Register associa os handlers a um asynq.ServeMux.
@@ -665,7 +671,24 @@ func (h *Handlers) HandleCollectJira(ctx context.Context, task *asynq.Task) erro
 		return fmt.Errorf("resolve jira email: %w", err)
 	}
 
-	source := jira.NewRESTSource(jiraInstance.BaseUrl, email, apiToken)
+	// Escolha do coletor Jira:
+	//   - Se JIRA_MCP_TOKEN estiver configurado, usa MCPSource
+	//     (Atlassian Rovo MCP em mcp.atlassian.com/v1/mcp) com
+	//     RESTSource como fallback automático em caso de erro.
+	//   - Caso contrário, REST direto.
+	// O MCP é o caminho recomendado quando a infra de OAuth do cliente
+	// está pronta; REST funciona com Basic auth (email + API token) e
+	// é o default seguro.
+	rest := jira.NewRESTSource(jiraInstance.BaseUrl, email, apiToken)
+	var source jira.Source = rest
+	if h.JiraMCPToken != "" {
+		mcpURL := h.JiraMCPURL
+		if mcpURL == "" {
+			mcpURL = "https://mcp.atlassian.com/v1/mcp"
+		}
+		source = jira.NewMCPSource(mcpURL, h.JiraMCPToken).WithFallback(rest)
+		log.Debug().Str("project_id", project.ID.String()).Msg("jira coletor: MCP primary + REST fallback")
+	}
 
 	// Janela JQL:
 	//   - default 30d (cobre MTTR/CFR window que reportamos)

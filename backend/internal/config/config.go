@@ -75,6 +75,7 @@ type JiraConfig struct {
 	APIToken      string
 	MCPURL        string
 	MCPAuthKind   string // "api_token" | "oauth"
+	MCPToken      string // Bearer token p/ chamar mcp.atlassian.com (env JIRA_MCP_TOKEN)
 	WebhookSecret string
 }
 
@@ -149,6 +150,7 @@ func Load() (Config, error) {
 			APIToken:      v.GetString("JIRA_API_TOKEN"),
 			MCPURL:        v.GetString("JIRA_MCP_URL"),
 			MCPAuthKind:   v.GetString("JIRA_MCP_AUTH_KIND"),
+			MCPToken:      v.GetString("JIRA_MCP_TOKEN"),
 			WebhookSecret: v.GetString("JIRA_WEBHOOK_SECRET"),
 		},
 	}

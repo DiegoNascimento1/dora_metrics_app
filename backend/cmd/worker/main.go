@@ -63,10 +63,12 @@ func main() {
 	defer asynqClient.Close()
 
 	handlers := &collector.Handlers{
-		DB:      db,
-		Secret:  secretProvider,
-		Asynq:   asynqClient,
-		Windows: []int{7, 30, 90},
+		DB:           db,
+		Secret:       secretProvider,
+		Asynq:        asynqClient,
+		Windows:      []int{7, 30, 90},
+		JiraMCPURL:   cfg.Jira.MCPURL,
+		JiraMCPToken: cfg.Jira.MCPToken,
 	}
 
 	srv := asynq.NewServer(
