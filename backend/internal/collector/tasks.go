@@ -18,6 +18,7 @@ const (
 	TaskComputeMetricWindow  = "compute:metric_window"
 	TaskSnapshotMonthly      = "snapshot:monthly"
 	TaskDigestWeekly         = "digest:weekly"
+	TaskPredictWeekly        = "predict:weekly"
 	TaskDispatchAlert        = "dispatch:alert"
 )
 

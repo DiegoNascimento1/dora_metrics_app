@@ -194,6 +194,20 @@ func buildScheduler(redisOpt asynq.RedisClientOpt) (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
+	// Predict semanal — segunda 10:00 UTC (1h depois do digest).
+	// Regressão linear sobre o histórico de tier rank; dispara
+	// alert_event para rules kind="predicted_regression" se a tendência
+	// for degrading com confidence >= medium.
+	predictTask := asynq.NewTask(
+		collector.TaskPredictWeekly,
+		nil,
+		asynq.Queue(collector.QueueDefault),
+		asynq.MaxRetry(2),
+	)
+	if _, err := s.Register("0 10 * * 1", predictTask); err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 

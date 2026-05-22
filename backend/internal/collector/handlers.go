@@ -41,6 +41,7 @@ func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskComputeMetricWindow, h.HandleComputeMetricWindow)
 	mux.HandleFunc(TaskSnapshotMonthly, h.HandleSnapshotMonthly)
 	mux.HandleFunc(TaskDigestWeekly, h.HandleDigestWeekly)
+	mux.HandleFunc(TaskPredictWeekly, h.HandlePredictWeekly)
 	mux.HandleFunc(TaskDispatchAlert, h.HandleDispatchAlert)
 }
 
