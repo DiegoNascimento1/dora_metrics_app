@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,4 +171,106 @@ func TestIntegration_ProjectMetrics_NotFound(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404, body=%s", w.Code, w.Body.String())
 	}
+}
+
+// TeamMetrics com team inexistente → 404.
+func TestIntegration_TeamMetrics_NotFound(t *testing.T) {
+	dsn, cleanup := setupContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool: %v", err)
+	}
+	defer pool.Close()
+
+	srv := NewServer(config.Config{}, &storage.Pool{Pool: pool}, asynq.NewClient(asynq.RedisClientOpt{Addr: "127.0.0.1:65000"}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/teams/00000000-0000-0000-0000-000000000099/metrics", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404, body=%s", w.Code, w.Body.String())
+	}
+}
+
+// Digest endpoint sem snapshot → 404 com mensagem específica.
+func TestIntegration_ProjectDigest_EmptyReturns404(t *testing.T) {
+	dsn, cleanup := setupContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool: %v", err)
+	}
+	defer pool.Close()
+
+	srv := NewServer(config.Config{}, &storage.Pool{Pool: pool}, asynq.NewClient(asynq.RedisClientOpt{Addr: "127.0.0.1:65000"}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/00000000-0000-0000-0000-000000000001/digest", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404, body=%s", w.Code, w.Body.String())
+	}
+}
+
+// IDs malformados → 400 (não 500).
+func TestIntegration_BadUUID_Returns400(t *testing.T) {
+	dsn, cleanup := setupContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool: %v", err)
+	}
+	defer pool.Close()
+
+	srv := NewServer(config.Config{}, &storage.Pool{Pool: pool}, asynq.NewClient(asynq.RedisClientOpt{Addr: "127.0.0.1:65000"}))
+	for _, path := range []string{
+		"/api/v1/projects/not-a-uuid/metrics",
+		"/api/v1/projects/not-a-uuid/digest",
+		"/api/v1/teams/not-a-uuid/metrics",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("path %s: status = %d, want 400", path, w.Code)
+		}
+	}
+}
+
+// Confirma /metrics (Prometheus) exposto pelo middleware observability.
+func TestIntegration_PrometheusMetricsEndpoint(t *testing.T) {
+	dsn, cleanup := setupContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool: %v", err)
+	}
+	defer pool.Close()
+
+	srv := NewServer(config.Config{}, &storage.Pool{Pool: pool}, asynq.NewClient(asynq.RedisClientOpt{Addr: "127.0.0.1:65000"}))
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	// Prometheus exposition format sempre traz alguma linha # HELP.
+	if !strings.Contains(body, "# HELP") {
+		t.Errorf("body sem '# HELP' (não é exposição Prometheus): %s", body[:min(200, len(body))])
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
