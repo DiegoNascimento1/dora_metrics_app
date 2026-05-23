@@ -62,6 +62,8 @@ func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskDigestWeekly, h.HandleDigestWeekly)
 	mux.HandleFunc(TaskPredictWeekly, h.HandlePredictWeekly)
 	mux.HandleFunc(TaskDispatchAlert, h.HandleDispatchAlert)
+	// GitHub
+	h.registerGitHubHandlers(mux)
 }
 
 // ReconcileBackfillDays é a profundidade da varredura que o job noturno força

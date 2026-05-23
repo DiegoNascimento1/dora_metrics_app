@@ -24,6 +24,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/dora-metrics-app/backend/internal/config"
+	"github.com/dora-metrics-app/backend/internal/llm"
 	mcpserver "github.com/dora-metrics-app/backend/internal/mcp/server"
 	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/storage"
@@ -68,7 +69,14 @@ func main() {
 	}
 	defer db.Close()
 
-	srv := mcpserver.New(db, token)
+	// LLM client — nil quando ANTHROPIC_API_KEY não está configurado;
+	// o servidor usa o template determinístico como fallback.
+	llmClient := llm.New(cfg.AnthropicAPIKey)
+	if llmClient != nil {
+		log.Info().Msg("LLM (Claude) habilitado para explainTrend")
+	}
+
+	srv := mcpserver.NewWithLLM(db, token, llmClient)
 
 	httpSrv := &http.Server{
 		Addr:              addr,

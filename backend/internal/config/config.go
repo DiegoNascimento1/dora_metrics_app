@@ -32,6 +32,14 @@ type Config struct {
 	// tenants ao Jira via UI. Vazio = feature desativada (UI esconde
 	// botão "Conectar Jira"; coletor cai pro REST com env tradicional).
 	AtlassianOAuth AtlassianOAuthConfig
+
+	// AnthropicAPIKey é a chave da API Anthropic para geração de narrativas
+	// LLM em explainTrend. Vazio = feature desativada (fallback ao template
+	// determinístico).
+	AnthropicAPIKey string
+
+	// SSE
+	RedisSSEChannelPrefix string
 }
 
 // AtlassianOAuthConfig contém as credenciais do app OAuth (do
@@ -128,6 +136,7 @@ func Load() (Config, error) {
 	v.SetDefault("JIRA_MCP_URL", "https://mcp.atlassian.com/v1/mcp")
 	v.SetDefault("JIRA_MCP_AUTH_KIND", "api_token")
 	v.SetDefault("GITLAB_BASE_URL", "https://gitlab.com")
+	v.SetDefault("REDIS_SSE_CHANNEL_PREFIX", "metrics")
 
 	cfg := Config{
 		Env:                 v.GetString("API_ENV"),
@@ -171,6 +180,8 @@ func Load() (Config, error) {
 			ClientSecret: v.GetString("ATLASSIAN_OAUTH_CLIENT_SECRET"),
 			RedirectURI:  v.GetString("ATLASSIAN_OAUTH_REDIRECT_URI"),
 		},
+		AnthropicAPIKey:       v.GetString("ANTHROPIC_API_KEY"),
+		RedisSSEChannelPrefix: v.GetString("REDIS_SSE_CHANNEL_PREFIX"),
 	}
 
 	return cfg, nil

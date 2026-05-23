@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
+	"github.com/dora-metrics-app/backend/internal/llm"
 	"github.com/dora-metrics-app/backend/internal/storage"
 	"github.com/dora-metrics-app/backend/internal/storage/queries"
 )
@@ -38,6 +39,7 @@ type Server struct {
 	tools    []Tool
 	handlers map[string]toolHandler
 	now      func() time.Time // injetável p/ testes
+	llm      *llm.Client     // nil = sem LLM, usa template fallback
 
 	// OAuth opcional. Quando Enabled(), o servidor aceita Bearer
 	// emitido pelo /oauth/token em vez do token estático. O token
@@ -64,12 +66,19 @@ type toolHandler func(ctx context.Context, args json.RawMessage) (any, error)
 // pelo endpoint /oauth/token. O token estático continua válido como
 // fallback (decisão pragmática: facilita rollout).
 func New(db *storage.Pool, token string) *Server {
+	return NewWithLLM(db, token, nil)
+}
+
+// NewWithLLM constrói um Server com cliente LLM opcional. Quando llmClient
+// for nil, explainTrend usa o template determinístico como fallback.
+func NewWithLLM(db *storage.Pool, token string, llmClient *llm.Client) *Server {
 	s := &Server{
 		db:       db,
 		token:    token,
 		handlers: map[string]toolHandler{},
 		now:      time.Now,
 		mux:      http.NewServeMux(),
+		llm:      llmClient,
 	}
 	s.registerTools()
 

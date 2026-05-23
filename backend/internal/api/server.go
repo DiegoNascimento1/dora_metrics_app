@@ -141,6 +141,9 @@ func (s *Server) routes() {
 		r.Get("/reliability/slos", s.handleReliabilitySLOs())
 		r.Get("/projects/{projectId}/predict", s.handleProjectPredict())
 		r.Get("/teams/{teamId}/predict", s.handleTeamPredict())
+		r.Get("/projects/{projectId}/anomalies", s.handleProjectAnomalies())
+		r.Get("/teams/{teamId}/anomalies", s.handleTeamAnomalies())
+		r.Get("/projects/{projectId}/metrics/stream", s.handleMetricsStream())
 
 		// Atlassian OAuth 3LO — admin conecta a conta Jira via UI.
 		r.Post("/integrations/atlassian/authorize", s.handleAtlassianAuthorize())
@@ -160,5 +163,6 @@ func (s *Server) routes() {
 	r.Route("/webhooks", func(r chi.Router) {
 		r.Post("/gitlab", s.handleGitLabWebhook())
 		r.Post("/jira", s.handleJiraWebhook())
+		r.Post("/github", s.handleGitHubWebhook())
 	})
 }

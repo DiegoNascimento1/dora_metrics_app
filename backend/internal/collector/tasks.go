@@ -11,15 +11,17 @@ import (
 
 // Tipos de tasks. Stringly-typed para fácil debug no asynqmon.
 const (
-	TaskScanActiveProjects   = "scan:active_projects"
-	TaskReconcileAllProjects = "reconcile:projects"
-	TaskCollectGitlab        = "collect:gitlab:deployments"
-	TaskCollectJira          = "collect:jira:incidents"
-	TaskComputeMetricWindow  = "compute:metric_window"
-	TaskSnapshotMonthly      = "snapshot:monthly"
-	TaskDigestWeekly         = "digest:weekly"
-	TaskPredictWeekly        = "predict:weekly"
-	TaskDispatchAlert        = "dispatch:alert"
+	TaskScanActiveProjects      = "scan:active_projects"
+	TaskReconcileAllProjects    = "reconcile:projects"
+	TaskCollectGitlab           = "collect:gitlab:deployments"
+	TaskCollectJira             = "collect:jira:incidents"
+	TaskCollectGitHubDeployments = "collect:github_deployments"
+	TaskCollectGitHubMRs        = "collect:github_mrs"
+	TaskComputeMetricWindow     = "compute:metric_window"
+	TaskSnapshotMonthly         = "snapshot:monthly"
+	TaskDigestWeekly            = "digest:weekly"
+	TaskPredictWeekly           = "predict:weekly"
+	TaskDispatchAlert           = "dispatch:alert"
 )
 
 // Filas (declaradas no asynq.Config).
@@ -133,5 +135,63 @@ func NewDispatchAlertTask(eventID uuid.UUID) (*asynq.Task, error) {
 		TaskDispatchAlert, payload,
 		asynq.Queue(QueueDefault),
 		asynq.MaxRetry(5),
+	), nil
+}
+
+// ---- GitHub ----
+
+// CollectGitHubPayload é o payload compartilhado pelas tasks GitHub.
+type CollectGitHubPayload struct {
+	ProjectID    uuid.UUID `json:"project_id"`
+	BackfillDays int       `json:"backfill_days,omitempty"`
+}
+
+// NewCollectGitHubDeploymentsTask constrói a task para coletar deployments do GitHub.
+func NewCollectGitHubDeploymentsTask(projectID uuid.UUID) (*asynq.Task, error) {
+	return newCollectGitHubDeploymentsTask(projectID, 0)
+}
+
+// NewCollectGitHubDeploymentsTaskWithBackfill cria a task forçando backfill de N dias.
+func NewCollectGitHubDeploymentsTaskWithBackfill(projectID uuid.UUID, days int) (*asynq.Task, error) {
+	return newCollectGitHubDeploymentsTask(projectID, days)
+}
+
+func newCollectGitHubDeploymentsTask(projectID uuid.UUID, backfillDays int) (*asynq.Task, error) {
+	payload, err := json.Marshal(CollectGitHubPayload{
+		ProjectID:    projectID,
+		BackfillDays: backfillDays,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(
+		TaskCollectGitHubDeployments, payload,
+		asynq.Queue(QueueCollect),
+		asynq.MaxRetry(3),
+	), nil
+}
+
+// NewCollectGitHubMRsTask constrói a task para coletar pull requests do GitHub.
+func NewCollectGitHubMRsTask(projectID uuid.UUID) (*asynq.Task, error) {
+	return newCollectGitHubMRsTask(projectID, 0)
+}
+
+// NewCollectGitHubMRsTaskWithBackfill cria a task forçando backfill de N dias.
+func NewCollectGitHubMRsTaskWithBackfill(projectID uuid.UUID, days int) (*asynq.Task, error) {
+	return newCollectGitHubMRsTask(projectID, days)
+}
+
+func newCollectGitHubMRsTask(projectID uuid.UUID, backfillDays int) (*asynq.Task, error) {
+	payload, err := json.Marshal(CollectGitHubPayload{
+		ProjectID:    projectID,
+		BackfillDays: backfillDays,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(
+		TaskCollectGitHubMRs, payload,
+		asynq.Queue(QueueCollect),
+		asynq.MaxRetry(3),
 	), nil
 }
