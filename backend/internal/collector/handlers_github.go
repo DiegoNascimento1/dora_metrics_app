@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
@@ -270,21 +269,8 @@ func isProductionEnv(name string) bool {
 		strings.HasPrefix(lower, "prod-") || strings.HasPrefix(lower, "production-")
 }
 
-// Garante que os handlers GitHub ficam registrados no ServeMux.
+// registerGitHubHandlers registra os handlers GitHub no ServeMux.
 func (h *Handlers) registerGitHubHandlers(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskCollectGitHubDeployments, h.HandleCollectGitHubDeployments)
 	mux.HandleFunc(TaskCollectGitHubMRs, h.HandleCollectGitHubMRs)
-}
-
-// strPtrGH cria ponteiro para string não-vazia (reutiliza o strPtr do handlers.go).
-func strPtrGH(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-// uuidToStr converte uuid.UUID para string.
-func uuidToStr(id uuid.UUID) string {
-	return id.String()
 }
