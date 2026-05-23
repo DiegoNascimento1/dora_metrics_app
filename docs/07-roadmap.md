@@ -245,6 +245,66 @@ Sem rebaixar a seriedade do produto — gamificação é **opt-in visual**, nunc
 | Time não confia nas métricas (data quality)                          | Drill-down até os eventos brutos já entregue na Fase 3                                             |
 | Métrica gameada (deploy de MR vazio para inflar DF)                  | `internal/calculator/gaming.go`: heurística `AnalyzeGaming` calcula % de MRs triviais (≤5 linhas) e mediana de tamanho na janela; sinaliza `gamingFlag=true` quando ≥50% dos deploys vieram de MRs triviais. Frontend renderiza aviso neutro ("considere revisar"). 9 testes unit cobrindo small sample, no-gaming, flag, ignora unknown, mediana, exato no threshold. |
 
+## Fase 7 — Inteligência aumentada (IA contextual) — 🔵 Em implementação
+
+**Objetivo:** transformar o dashboard de "ferramenta de medição" em "copiloto de Engineering Manager". O histórico já existe, o MCP já está em pé — fase de maior ROI imediato.
+
+- [x] **LLM no `explainTrend`** — `internal/llm/client.go` com `anthropics/anthropic-sdk-go`; prompt caching no `system` prompt (thresholds DORA + glossário); input: snapshots `metric_window` atual + anterior + top 5 deploys + incidents; output: 2-3 parágrafos com causa provável + ações sugeridas. Fallback para template determinístico se `ANTHROPIC_API_KEY` não configurado. Tool MCP `explainTrend` atualizada.
+- [x] **Anomaly detection multivariada** — `internal/prediction/anomaly.go` com z-score sobre DF + Lead Time + CFR simultâneos (janela deslizante 90d, threshold ±2σ). Endpoint `GET /api/v1/{projects,teams}/{id}/anomalies?window=90d`. Retorna lista de `{date, metric, z_score, direction, severity}`. Detecta spikes que a regressão linear por métrica única perderia (ex.: CFR sobe enquanto DF cai — sinal de crise silenciosa).
+- [x] **Root cause analysis para incidents** — ao resolver incident, endpoint `GET /api/v1/incidents/{id}/root-cause` correlaciona com deploys das últimas 24h e lista os MRs suspeitos (por janela temporal e autor). Tool MCP `findRootCause`.
+- [ ] Chat conversacional no dashboard — UI de chat que consome o MCP server próprio. Escopo: Fase 8.
+
+**Critério de saída:** EM abre o dashboard sexta às 17h, lê a narrativa gerada, identifica em < 1min o que pedir para o time priorizar na próxima sprint.
+
+## Fase 8 — Plataforma multi-fonte (GitHub + Linear) — 🔵 Em implementação
+
+**Objetivo:** quebrar a dependência de GitLab+Jira. Maioria das empresas tem times em GitHub; Linear é o tracker moderno preferido por times de eng.
+
+- [x] **Coletor GitHub** — `internal/collector/github/client.go`: REST API v3 (deployments, pull_requests, commits). Webhook handler em `api/webhooks.go` (event `push`, `pull_request`, `deployment_status`, `workflow_run`). Validação via `X-Hub-Signature-256`. Source instance `kind=github`. Migration `0014` adiciona `github` ao enum de source kinds. Tasks asynq `collect:github_deployments`, `collect:github_mrs`. Mapeamento: PR → `merge_request`, Deployment → `deployment`, Workflow Run falho → `incident`.
+- [ ] Coletor Bitbucket Cloud — próxima iteração após GitHub estável.
+- [ ] Coletor Azure DevOps — próxima iteração.
+- [ ] Coletor Linear — GraphQL API para times que não usam Jira.
+- [ ] Abstração `SourceProvider` formal — interface Go com `FetchDeployments`/`FetchMRs`/`FetchIncidents`; refactor dos coletores GitLab/GitHub para implementá-la.
+- [ ] UI seleção de fonte — wizard `/settings/sources/new` com cards por provider + OAuth flow por kind.
+
+**Critério de saída:** empresa com times no GitLab e no GitHub vê métricas DORA de todos os times no mesmo dashboard.
+
+## Fase 9 — Onboarding self-service + Real-time — 🔵 Em implementação
+
+**Objetivo:** reduzir time-to-first-value de "requer CLI + DBA" para "< 5 min via browser".
+
+- [x] **Setup wizard frontend** — rota `/setup` com 4 steps: (1) criar tenant, (2) conectar fonte via OAuth/token, (3) escolher projetos, (4) backfill 30d + primeiro número. Substituição funcional dos comandos `cli tenant add` + `cli source-instance add` + `cli project add`. Componente `SetupWizardComponent` com `MatStepper`.
+- [x] **Server-Sent Events** — endpoint `GET /api/v1/projects/{id}/metrics/stream` (SSE, `text/event-stream`). Após `HandleComputeMetricWindow` gravar nova `metric_window`, publica evento no Redis canal `metrics:{project_id}`. Handler SSE assina o canal e faz push ao cliente. Dashboard Angular assina SSE e atualiza tiles sem F5. Badge "Atualizado agora" aparece por 3s.
+- [x] **Demo mode** — flag `?demo=true` na URL carrega dataset sintético pré-gerado (90 dias, 3 times, variação Elite→Medium→recovering). Sem login, sem backend live. `DemoService` injetado em lugar do `ApiClient` quando flag ativa. Útil para showroom com C-level.
+- [ ] Slack/Teams app nativo — slash command `/dora <time>` retorna card rich. Requer signing secret + bot install flow.
+
+**Critério de saída:** novo time entra no app, conecta GitHub via wizard, vê primeiro tile em < 5 min; deploy feito aparece em tiles em < 30s sem refresh.
+
+## Fase 10 — Governança e escala
+
+**Objetivo:** habilitar crescimento além de 50 projetos e adoção em organizações com requisitos de compliance.
+
+- [ ] **RBAC granular** — roles `viewer`/`editor`/`admin` por team/project. Tabela `platform.permission` + middleware `RequireRole`. Hoje qualquer usuário logado vê tudo do tenant.
+- [ ] **Audit log estruturado** — toda ação admin (criar source, editar alert_rule, linkar identity) vai para `platform.audit_event`. Endpoint `GET /api/v1/audit?actor=&action=&from=&to=`.
+- [ ] **TimescaleDB para raw_event + metric_daily** — gatilho do ADR 0002 (> 50M linhas, P95 dashboard > 500ms). Migration converte tabela em hypertable; continuous aggregates substituem cron de `compute:metric_window` para janelas grandes.
+- [ ] **Read replica para dashboard** — pgx pool com endpoint separado; queries de timeseries vão para replica.
+- [ ] **Cache de séries temporais em Redis** — TTL 5 min para `/timeseries`, invalidação por webhook.
+- [ ] **DCR (RFC 7591)** no servidor MCP — auto-registro de cliente OAuth.
+
+**Critério de saída:** app comporta 500 projetos + 5000 usuários sem degradação perceptível; audit trail aceita revisão SOC2-like.
+
+## Fase 11 — Além de DORA (SPACE + DevEx)
+
+**Objetivo:** para times maduros que superaram as 4 métricas DORA e querem visão holística de developer experience.
+
+- [ ] **SPACE metrics** — Satisfaction (survey trimestral integrado via `/surveys`), Performance (DORA já cobre), Activity (commits/MRs por person), Communication (PR review time já temos), Efficiency (focus time via integração calendário).
+- [ ] **DevEx framework** (Forsgren/Houman/Storey) — feedback loops, cognitive load, flow state. Survey ligado a `person_id`, resultados em `platform.devex_response`.
+- [ ] **Cost analytics** — deploys × tempo médio × engenheiros → custo estimado de delivery. Conecta com cloud spend (AWS Cost Explorer) por team.
+- [ ] **Retrospective integration** — botão "Criar retro com este incident" gera template Markdown pré-preenchido e abre Confluence/Notion via API.
+- [ ] **Coaching playbooks** — biblioteca de padrões anti-DORA (deploy às sextas, MRs gigantes, review tardio) com ações sugeridas; sistema sugere o playbook certo baseado no perfil do time.
+
+**Critério de saída:** EMs e VPs usam o app como ferramenta de coaching ativa, não só relatório passivo.
+
 ## Fontes
 
 - Doc de métricas: [01-dora-metrics.md](01-dora-metrics.md)
