@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  OnDestroy,
   signal,
 } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
@@ -18,6 +19,8 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin, of, catchError, finalize } from 'rxjs';
+
+import { DemoService } from '../../core/demo/demo.service';
 
 import { SkeletonComponent } from '../../shared/skeleton.component';
 import { EmptyStateComponent } from '../../shared/empty-state.component';
@@ -38,6 +41,7 @@ import {
   Classification,
   Deployment,
   DoraMetrics,
+  PredictResponse,
   Project,
   ProjectAchievements,
   Team,
@@ -100,6 +104,26 @@ type Window = '7d' | '30d' | '90d';
     WeeklyDigestCardComponent,
   ],
   template: `
+    <!-- Banner modo demo -->
+    @if (demo.isDemo()) {
+      <div class="demo-banner">
+        <mat-icon fontIcon="science" class="demo-icon"></mat-icon>
+        <span>Modo demonstração — dados sintéticos.</span>
+        <a routerLink="/settings" class="demo-link">Conectar dados reais →</a>
+      </div>
+    }
+
+    <!-- Badge SSE status -->
+    <div class="sse-status" [class.sse-live]="sseLive()" [class.sse-paused]="!sseLive() && sseConnected()">
+      @if (sseLive()) {
+        <span class="sse-dot live"></span>
+        <span class="sse-label">Ao vivo</span>
+      } @else if (sseConnected()) {
+        <span class="sse-dot paused"></span>
+        <span class="sse-label">Atualização automática pausada</span>
+      }
+    </div>
+
     <h1>DORA — visão geral</h1>
 
     @if (projects().length === 0 && !loading()) {
@@ -299,6 +323,47 @@ type Window = '7d' | '30d' | '90d';
           <app-achievements-card [data]="achievements()" />
         }
 
+        <!-- Card: Narrativa IA do período -->
+        @if (scope === 'project' && selectedProjectId) {
+          <mat-card appearance="outlined" class="ai-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon fontIcon="auto_awesome" class="ai-icon"></mat-icon>
+                Análise do período
+              </mat-card-title>
+              <mat-card-subtitle>Gerado por IA com base nos últimos 30 dias</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              @if (loadingNarrative()) {
+                <div class="narrative-skel">
+                  <app-skeleton variant="text" width="95%" />
+                  <app-skeleton variant="text" width="80%" />
+                  <app-skeleton variant="text" width="60%" />
+                </div>
+              } @else if (narrativeText()) {
+                <p class="narrative-text">{{ narrativeText() }}</p>
+              } @else {
+                <div class="narrative-empty">
+                  <mat-icon fontIcon="key" class="key-icon"></mat-icon>
+                  <span>Configure <code>ANTHROPIC_API_KEY</code> para ativar análise por IA.</span>
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Link para Anomalias -->
+          <div class="anomalies-link-row">
+            <a
+              mat-stroked-button
+              [routerLink]="['/projects', selectedProjectId, 'anomalies']"
+              class="anomalies-link"
+            >
+              <mat-icon fontIcon="manage_search"></mat-icon>
+              Ver anomalias detectadas
+            </a>
+          </div>
+        }
+
         <app-weekly-digest-card
           [scopeKind]="scope"
           [scopeId]="scope === 'team' ? selectedTeamId : selectedProjectId"
@@ -448,12 +513,135 @@ type Window = '7d' | '30d' | '90d';
         margin: 16px 0;
       }
       /* tier-* classes vêm dos estilos globais (src/styles/_tier-badge.scss) */
+
+      /* ---- Demo mode banner ---- */
+      .demo-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: var(--radius-md);
+        padding: var(--space-2) var(--space-4);
+        margin-bottom: var(--space-3);
+        font-size: var(--font-size-sm);
+        color: #92400e;
+      }
+      [data-theme='dark'] .demo-banner {
+        background: #451a03;
+        border-color: #78350f;
+        color: #fde68a;
+      }
+      .demo-icon {
+        font-size: 18px;
+        height: 18px;
+        width: 18px;
+        flex-shrink: 0;
+      }
+      .demo-link {
+        color: var(--color-brand);
+        font-weight: 600;
+        text-decoration: none;
+        margin-left: auto;
+      }
+      .demo-link:hover { text-decoration: underline; }
+
+      /* ---- SSE status badge ---- */
+      .sse-status {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        margin-bottom: var(--space-1);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-muted);
+        min-height: 20px;
+      }
+      .sse-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .sse-dot.live {
+        background: var(--color-tier-elite);
+        animation: pulse-dot 2s ease-in-out infinite;
+      }
+      .sse-dot.paused {
+        background: var(--color-text-muted);
+      }
+      .sse-label { font-weight: 500; }
+      .sse-live .sse-label { color: var(--color-tier-elite); }
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
+      }
+
+      /* ---- AI narrative card ---- */
+      .ai-card {
+        margin-top: var(--space-5);
+      }
+      .ai-card mat-card-title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .ai-icon {
+        font-size: 20px;
+        height: 20px;
+        width: 20px;
+        color: var(--color-brand);
+      }
+      .narrative-skel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-2) 0;
+      }
+      .narrative-text {
+        margin: 0;
+        color: var(--color-text-secondary);
+        line-height: 1.7;
+        font-size: var(--font-size-sm);
+      }
+      .narrative-empty {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        background: var(--color-surface-subtle);
+        border-radius: var(--radius-md);
+        color: var(--color-text-muted);
+        font-size: var(--font-size-sm);
+      }
+      .key-icon {
+        font-size: 16px;
+        height: 16px;
+        width: 16px;
+        flex-shrink: 0;
+      }
+      .narrative-empty code {
+        background: var(--color-bg-elevated);
+        padding: 1px 6px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        border: 1px solid var(--color-border);
+      }
+
+      /* ---- Anomalies link ---- */
+      .anomalies-link-row {
+        margin-top: var(--space-3);
+        display: flex;
+        justify-content: flex-end;
+      }
     `,
   ],
 })
-export class DashboardComponent {
+export class DashboardComponent implements OnDestroy {
   private api = inject(ApiClient);
   private dialog = inject(MatDialog);
+  protected demo = inject(DemoService);
 
   loading = signal(false);
   error = signal<string | null>(null);
@@ -463,6 +651,17 @@ export class DashboardComponent {
   points = signal<TimeseriesPoint[]>([]);
   deployments = signal<Deployment[]>([]);
   achievements = signal<ProjectAchievements | null>(null);
+
+  // ---- SSE state ----
+  private metricsStream?: EventSource;
+  private sseRetryCount = 0;
+  private readonly SSE_MAX_RETRIES = 5;
+  sseLive = signal(false);
+  sseConnected = signal(false);
+
+  // ---- AI narrative ----
+  narrativeText = signal<string | null>(null);
+  loadingNarrative = signal(false);
 
   scope: 'project' | 'team' = 'project';
   selectedProjectId: string | null = null;
@@ -537,7 +736,84 @@ export class DashboardComponent {
   }
 
   constructor() {
+    // Ativa modo demo se ?demo=true na URL
+    this.demo.init();
     this.loadProjects();
+  }
+
+  ngOnDestroy(): void {
+    this.closeSSE();
+  }
+
+  // ---- SSE consumer ----
+
+  private openSSE(projectId: string): void {
+    this.closeSSE();
+    this.sseRetryCount = 0;
+    this.connectSSE(projectId);
+  }
+
+  private connectSSE(projectId: string): void {
+    const url = `/api/v1/projects/${projectId}/metrics/stream`;
+    const es = new EventSource(url);
+    this.metricsStream = es;
+
+    es.addEventListener('open', () => {
+      this.sseLive.set(true);
+      this.sseConnected.set(true);
+      this.sseRetryCount = 0;
+    });
+
+    es.addEventListener('message', (evt) => {
+      if (!evt.data || evt.data === 'heartbeat') return;
+      try {
+        const payload = JSON.parse(evt.data) as Partial<DoraMetrics>;
+        const current = this.metrics();
+        if (current) {
+          this.metrics.set({ ...current, ...payload });
+        }
+      } catch {
+        // ignora payload malformado
+      }
+    });
+
+    es.addEventListener('heartbeat', () => {
+      // Sinal de vida — ignora silenciosamente
+    });
+
+    es.addEventListener('error', () => {
+      this.sseLive.set(false);
+      es.close();
+
+      if (this.sseRetryCount < this.SSE_MAX_RETRIES) {
+        const delay = Math.pow(2, this.sseRetryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
+        this.sseRetryCount++;
+        setTimeout(() => this.connectSSE(projectId), delay);
+      } else {
+        this.sseConnected.set(false);
+      }
+    });
+  }
+
+  private closeSSE(): void {
+    if (this.metricsStream) {
+      this.metricsStream.close();
+      this.metricsStream = undefined;
+    }
+    this.sseLive.set(false);
+    this.sseConnected.set(false);
+    this.sseRetryCount = 0;
+  }
+
+  // ---- AI narrative ----
+
+  private loadNarrative(projectId: string): void {
+    this.loadingNarrative.set(true);
+    this.narrativeText.set(null);
+    this.api.getProjectPredict(projectId, 30).pipe(
+      catchError(() => of<PredictResponse>({ projectId, lookbackDays: 30, explanation: null, computedAt: '' })),
+      finalize(() => this.loadingNarrative.set(false)),
+    ).subscribe((r) => this.narrativeText.set(r.explanation));
   }
 
   private loadProjects(): void {
@@ -593,19 +869,29 @@ export class DashboardComponent {
 
   private reloadProject(projectId: string): void {
     this.loading.set(true);
+    // Fecha SSE antes de recarregar (será reaberto após o load)
+    this.closeSSE();
+
+    // Em modo demo, usa os dados sintéticos do DemoService
+    const metricsObs = this.demo.isDemo()
+      ? this.demo.getMetrics(projectId).pipe(catchError(() => of(null)))
+      : this.api.getProjectMetrics(projectId, this.selectedWindow).pipe(catchError(() => of(null)));
+
+    const timeseriesObs = this.demo.isDemo()
+      ? this.demo.getTimeseries(projectId).pipe(catchError(() => of({ points: [] as TimeseriesPoint[] })))
+      : this.api.getProjectTimeseries(projectId, this.selectedWindow).pipe(catchError(() => of({ points: [] as TimeseriesPoint[] })));
+
+    const achievementsObs = this.demo.isDemo()
+      ? this.demo.getAchievements(projectId).pipe(catchError(() => of<ProjectAchievements | null>(null)))
+      : this.api.getProjectAchievements(projectId, this.selectedWindow).pipe(catchError(() => of<ProjectAchievements | null>(null)));
+
     forkJoin({
-      metrics: this.api
-        .getProjectMetrics(projectId, this.selectedWindow)
-        .pipe(catchError(() => of(null))),
-      timeseries: this.api
-        .getProjectTimeseries(projectId, this.selectedWindow)
-        .pipe(catchError(() => of({ points: [] as TimeseriesPoint[] }))),
+      metrics: metricsObs,
+      timeseries: timeseriesObs,
       deployments: this.api
         .listProjectDeployments(projectId, this.selectedWindow)
         .pipe(catchError(() => of([] as Deployment[]))),
-      achievements: this.api
-        .getProjectAchievements(projectId, this.selectedWindow)
-        .pipe(catchError(() => of<ProjectAchievements | null>(null))),
+      achievements: achievementsObs,
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe(({ metrics, timeseries, deployments, achievements }) => {
@@ -613,11 +899,20 @@ export class DashboardComponent {
         this.points.set(timeseries.points ?? []);
         this.deployments.set(deployments);
         this.achievements.set(achievements);
+        // Abre SSE apenas em modo real (não demo) e scope=project
+        if (!this.demo.isDemo()) {
+          this.openSSE(projectId);
+          this.loadNarrative(projectId);
+        }
       });
   }
 
   private reloadTeam(teamId: string): void {
     this.loading.set(true);
+    // SSE e narrativa não suportam scope=team ainda
+    this.closeSSE();
+    this.narrativeText.set(null);
+
     forkJoin({
       metrics: this.api
         .getTeamMetrics(teamId, this.selectedWindow)

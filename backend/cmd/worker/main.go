@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -63,10 +64,15 @@ func main() {
 	asynqClient := asynq.NewClient(redisOpt)
 	defer asynqClient.Close()
 
+	// Redis client separado para pub/sub SSE (asynq não expõe o cliente raw).
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.Worker.RedisAddr})
+	defer rdb.Close()
+
 	handlers := &collector.Handlers{
 		DB:           db,
 		Secret:       secretProvider,
 		Asynq:        asynqClient,
+		Redis:        rdb,
 		Windows:      []int{7, 30, 90},
 		JiraMCPURL:   cfg.Jira.MCPURL,
 		JiraMCPToken: cfg.Jira.MCPToken,

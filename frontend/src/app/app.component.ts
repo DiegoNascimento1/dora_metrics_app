@@ -53,6 +53,10 @@ import {
         <mat-icon class="nav-icon" fontIcon="settings"></mat-icon>
         Configurações
       </a>
+      <a mat-button routerLink="/setup" routerLinkActive="active">
+        <mat-icon class="nav-icon" fontIcon="rocket_launch"></mat-icon>
+        Setup
+      </a>
 
       <button
         mat-icon-button

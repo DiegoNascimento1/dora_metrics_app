@@ -9,6 +9,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
+	"github.com/dora-metrics-app/backend/internal/llm"
 )
 
 type windowArgs struct {
@@ -114,15 +117,9 @@ func (s *Server) toolCompareTeams(ctx context.Context, raw json.RawMessage) (any
 	}, nil
 }
 
-// explainTrend — narrativa textual gerada via template determinístico.
-//
-// Em vez de chamar um LLM (custo + latência + variabilidade), comparamos
-// a metric_window mais recente com a anterior e descrevemos as diferenças
-// em texto plano. Esse texto é exatamente o tipo de coisa que LLMs gastam
-// tempo derivando — fornecê-lo pronto economiza tokens no consumidor.
-//
-// TODO: hook para LLM (Anthropic Messages API) quando houver budget e
-// guardrails para evitar inventar tendências.
+// explainTrend — narrativa textual. Tenta LLM primeiro (Claude, com prompt
+// caching no system prompt estático); se LLM indisponível ou com erro,
+// usa template determinístico como fallback. Isso garante resposta sempre.
 func (s *Server) toolExplainTrend(ctx context.Context, raw json.RawMessage) (any, error) {
 	var args struct {
 		windowArgs
@@ -160,6 +157,24 @@ func (s *Server) toolExplainTrend(ctx context.Context, raw json.RawMessage) (any
 	}
 
 	tier, _ := current["classification"].(string)
+
+	// Tenta LLM (Claude) quando disponível.
+	if s.llm != nil {
+		input := buildExplainTrendInput(kind, id.String(), args.effective(), current)
+		narrative, llmErr := s.llm.ExplainTrend(ctx, input)
+		if llmErr != nil {
+			log.Warn().Err(llmErr).Msg("explainTrend: LLM falhou, usando template fallback")
+		} else if narrative != "" {
+			return map[string]any{
+				"text":          narrative,
+				"deterministic": false,
+				"llm_used":      true,
+				"current":       current,
+			}, nil
+		}
+	}
+
+	// Fallback: template determinístico.
 	narrative := fmt.Sprintf(
 		"Janela de %d dias do %s %s: classificação combinada = %s. ",
 		args.effective(), kind, id, tierBR(tier),
@@ -180,8 +195,37 @@ func (s *Server) toolExplainTrend(ctx context.Context, raw json.RawMessage) (any
 	return map[string]any{
 		"text":          narrative,
 		"deterministic": true,
+		"llm_used":      false,
 		"current":       current,
 	}, nil
+}
+
+// buildExplainTrendInput monta o ExplainTrendInput a partir dos dados
+// disponíveis na metric_window.
+func buildExplainTrendInput(kind, id string, windowDays int, current map[string]any) llm.ExplainTrendInput {
+	snap := llm.MetricSnapshot{}
+	if df, ok := current["deployment_frequency"].(float64); ok {
+		snap.DeployFreqPerDay = df
+	}
+	if lt, ok := current["lead_time_median_seconds"].(int64); ok && lt > 0 {
+		snap.LeadTimeHours = float64(lt) / 3600.0
+	}
+	if cfr, ok := current["change_failure_rate"].(float64); ok {
+		snap.ChangeFailureRate = cfr
+	}
+	if mttr, ok := current["mttr_mean_seconds"].(int64); ok && mttr > 0 {
+		snap.MTTRHours = float64(mttr) / 3600.0
+	}
+	if tier, ok := current["classification"].(string); ok {
+		snap.Tier = tier
+	}
+
+	projectName := fmt.Sprintf("%s %s", kind, id)
+	return llm.ExplainTrendInput{
+		ProjectName: projectName,
+		Window:      fmt.Sprintf("%dd", windowDays),
+		Current:     snap,
+	}
 }
 
 func tierBR(t string) string {

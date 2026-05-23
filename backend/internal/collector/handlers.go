@@ -13,6 +13,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 
 	"github.com/dora-metrics-app/backend/internal/alerts"
@@ -30,6 +31,10 @@ type Handlers struct {
 	Secret  secret.Provider
 	Asynq   *asynq.Client
 	Windows []int // janelas em dias que recalculamos (ex: [7, 30, 90])
+
+	// Redis para pub/sub SSE — opcional. Quando não-nil, publica
+	// "metrics:{project_id}" após cada HandleComputeMetricWindow.
+	Redis *redis.Client
 
 	// Coletor Jira via Atlassian Rovo MCP.
 	// Quando JiraMCPToken != "", usa MCPSource com fallback REST.
@@ -62,6 +67,8 @@ func (h *Handlers) Register(mux *asynq.ServeMux) {
 	mux.HandleFunc(TaskDigestWeekly, h.HandleDigestWeekly)
 	mux.HandleFunc(TaskPredictWeekly, h.HandlePredictWeekly)
 	mux.HandleFunc(TaskDispatchAlert, h.HandleDispatchAlert)
+	// GitHub
+	h.registerGitHubHandlers(mux)
 }
 
 // ReconcileBackfillDays é a profundidade da varredura que o job noturno força
@@ -502,6 +509,26 @@ func (h *Handlers) HandleComputeMetricWindow(ctx context.Context, task *asynq.Ta
 		Interface("mttr_mean_s", mttrMeanS).
 		Str("class", classification).
 		Msg("metric window updated")
+
+	// Publica no canal Redis para notificar clientes SSE.
+	if h.Redis != nil {
+		ssePayload := map[string]any{
+			"project_id":     project.ID.String(),
+			"window_days":    payload.WindowDays,
+			"deploy_freq":    df,
+			"lead_time_s":    leadTimeMedianS,
+			"cfr":            cfrFloat,
+			"mttr_s":         mttrMeanS,
+			"classification": classification,
+			"computed_at":    time.Now().UTC().Format(time.RFC3339),
+		}
+		if payloadBytes, jsonErr := json.Marshal(ssePayload); jsonErr == nil {
+			channel := fmt.Sprintf("metrics:%s", project.ID.String())
+			if pubErr := h.Redis.Publish(ctx, channel, string(payloadBytes)).Err(); pubErr != nil {
+				log.Warn().Err(pubErr).Str("channel", channel).Msg("sse publish: redis error")
+			}
+		}
+	}
 
 	h.fanOutAlertsForTierChange(ctx, q, project, payload.WindowDays, previousTier, classification)
 

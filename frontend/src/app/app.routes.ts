@@ -73,6 +73,22 @@ export const routes: Routes = [
       ),
   },
   {
+    // Wizard de onboarding self-service (Fase 9)
+    path: 'setup',
+    loadComponent: () =>
+      import('./features/setup/setup-wizard.component').then(
+        (m) => m.SetupWizardComponent,
+      ),
+  },
+  {
+    // Tela de anomalias multivariadas por projeto (Fase 7)
+    path: 'projects/:id/anomalies',
+    loadComponent: () =>
+      import('./features/anomalies/anomalies.component').then(
+        (m) => m.AnomaliesComponent,
+      ),
+  },
+  {
     path: '**',
     redirectTo: 'dashboard',
   },

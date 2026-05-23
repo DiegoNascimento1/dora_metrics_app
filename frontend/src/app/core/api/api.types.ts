@@ -3,6 +3,45 @@
 
 export type Classification = 'elite' | 'high' | 'medium' | 'low' | 'insufficient_data';
 
+// ---- Tenant / workspace (Fase 9 — Setup Wizard) ----
+export interface Tenant {
+  id: string;
+  slug: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface CreateTenantRequest {
+  slug: string;
+  name: string;
+}
+
+// ---- Anomalies (Fase 7) ----
+export type AnomalySeverity = 'warning' | 'critical';
+export type AnomalyMetric = 'df' | 'lt' | 'cfr' | 'mttr';
+
+export interface Anomaly {
+  id: string;
+  projectId: string;
+  detectedAt: string;      // ISO date
+  windowStart: string;     // ISO date
+  windowEnd: string;       // ISO date
+  metric: AnomalyMetric;
+  severity: AnomalySeverity;
+  description: string;
+  valueObserved: number | null;
+  expectedMin: number | null;
+  expectedMax: number | null;
+}
+
+// ---- AI narrative (Fase 7 / Fase 9) ----
+export interface PredictResponse {
+  projectId: string;
+  lookbackDays: number;
+  explanation: string | null;
+  computedAt: string;
+}
+
 export interface Project {
   id: string;
   slug: string;

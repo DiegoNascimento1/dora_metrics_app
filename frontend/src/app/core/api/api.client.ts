@@ -5,10 +5,12 @@ import { Observable } from 'rxjs';
 import {
   AlertEvent,
   AlertRule,
+  Anomaly,
   CreateAlertRuleRequest,
   CreatePersonRequest,
   CreateSourceInstanceRequest,
   CreateTeamRequest,
+  CreateTenantRequest,
   Deployment,
   DoraMetrics,
   Identity,
@@ -16,10 +18,12 @@ import {
   Person,
   PersonMetrics,
   PersonWithIdentities,
+  PredictResponse,
   Project,
   ProjectAchievements,
   SourceInstance,
   Team,
+  Tenant,
   TestConnectionRequest,
   TestConnectionResponse,
   AtlassianAuthorizeResponse,
@@ -277,6 +281,33 @@ export class ApiClient {
 
   healthz(): Observable<{ status: string }> {
     return this.http.get<{ status: string }>('/healthz');
+  }
+
+  // ---- tenant / workspace (Fase 9 — Setup Wizard) ----
+
+  createTenant(body: CreateTenantRequest): Observable<Tenant> {
+    return this.http.post<Tenant>(`${API_BASE}/tenants`, body);
+  }
+
+  // ---- anomalies (Fase 7) ----
+
+  listProjectAnomalies(
+    projectId: string,
+    window: '7d' | '30d' | '90d' = '90d',
+  ): Observable<Anomaly[]> {
+    return this.http.get<Anomaly[]>(
+      `${API_BASE}/projects/${projectId}/anomalies`,
+      { params: { window } },
+    );
+  }
+
+  // ---- AI narrative prediction (Fase 7 / Fase 9) ----
+
+  getProjectPredict(projectId: string, lookback = 30): Observable<PredictResponse> {
+    return this.http.get<PredictResponse>(
+      `${API_BASE}/projects/${projectId}/predict`,
+      { params: { lookback: String(lookback) } },
+    );
   }
 
   // ---- export (Fase 4 — Critério de saída) ----

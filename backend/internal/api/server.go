@@ -9,13 +9,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 
 	"github.com/dora-metrics-app/backend/internal/config"
 	"github.com/dora-metrics-app/backend/internal/integrations/atlassian"
 	"github.com/dora-metrics-app/backend/internal/observability"
 	"github.com/dora-metrics-app/backend/internal/reliability"
 	"github.com/dora-metrics-app/backend/internal/storage"
-	"github.com/rs/zerolog/log"
 )
 
 // Server agrega dependências de runtime da API.
@@ -23,6 +24,7 @@ type Server struct {
 	cfg         config.Config
 	db          *storage.Pool
 	asynq       *asynq.Client
+	rdb         *redis.Client // para pub/sub SSE (nil = SSE desabilitado)
 	reliability reliability.Provider
 	atlassian   *atlassian.Service
 	mux         *chi.Mux
@@ -67,8 +69,11 @@ func NewServer(cfg config.Config, db *storage.Pool, asynqClient *asynq.Client) *
 		}
 	}
 
+	// Redis pub/sub para SSE — usa o mesmo addr do worker.
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.Worker.RedisAddr})
+
 	s := &Server{
-		cfg: cfg, db: db, asynq: asynqClient,
+		cfg: cfg, db: db, asynq: asynqClient, rdb: rdb,
 		reliability: relProvider,
 		atlassian:   atlSvc,
 		mux:         chi.NewRouter(),
@@ -141,6 +146,9 @@ func (s *Server) routes() {
 		r.Get("/reliability/slos", s.handleReliabilitySLOs())
 		r.Get("/projects/{projectId}/predict", s.handleProjectPredict())
 		r.Get("/teams/{teamId}/predict", s.handleTeamPredict())
+		r.Get("/projects/{projectId}/anomalies", s.handleProjectAnomalies())
+		r.Get("/teams/{teamId}/anomalies", s.handleTeamAnomalies())
+		r.Get("/projects/{projectId}/metrics/stream", s.handleMetricsStream())
 
 		// Atlassian OAuth 3LO — admin conecta a conta Jira via UI.
 		r.Post("/integrations/atlassian/authorize", s.handleAtlassianAuthorize())
@@ -160,5 +168,6 @@ func (s *Server) routes() {
 	r.Route("/webhooks", func(r chi.Router) {
 		r.Post("/gitlab", s.handleGitLabWebhook())
 		r.Post("/jira", s.handleJiraWebhook())
+		r.Post("/github", s.handleGitHubWebhook())
 	})
 }
