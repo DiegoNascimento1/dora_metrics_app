@@ -1,4 +1,4 @@
-# ADR 0003 — Stack do servidor MCP próprio
+# ADR 0004 — Stack do servidor MCP próprio
 
 > **Status:** Aceito
 > **Data:** 2026-05-22

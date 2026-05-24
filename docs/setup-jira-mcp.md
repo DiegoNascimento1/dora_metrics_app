@@ -183,4 +183,4 @@ OAuth. Rotação com 2 chaves simultâneas é roadmap futuro.
 - [Atlassian Rovo MCP server](https://www.atlassian.com/blog/announcements/remote-mcp-server)
 - [Model Context Protocol spec](https://modelcontextprotocol.io)
 - Código: [internal/integrations/atlassian/](../backend/internal/integrations/atlassian/), [internal/mcp/client/atlassian.go](../backend/internal/mcp/client/atlassian.go)
-- ADR: [docs/adr/0003-mcp-server-stack.md](adr/0003-mcp-server-stack.md)
+- ADR: [docs/adr/0004-mcp-server-stack.md](adr/0004-mcp-server-stack.md)

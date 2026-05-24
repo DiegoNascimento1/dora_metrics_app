@@ -22,7 +22,7 @@ Ver [docs/adr/](adr/) para o histórico completo de ADRs.
 ### Decididas
 
 - **D1 — Stack:** Go (backend) + Angular (frontend). Ver [ADR 0001](adr/0001-stack-go-angular.md).
-- **D2 — Banco:** PostgreSQL 16+ puro. Ver [ADR 0002](adr/0002-database-postgresql.md).
+- **D2 — Banco:** PostgreSQL 18+ puro. Ver [ADR 0002](adr/0002-database-postgresql.md).
 
 ### Pendentes
 

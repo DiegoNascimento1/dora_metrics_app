@@ -6,7 +6,7 @@
 // hoje: `initialize` + `tools/call` para a tool `searchJiraIssuesUsingJql`.
 //
 // Auth: Bearer estático no MVP (env `JIRA_MCP_TOKEN`). OAuth 2.1
-// completo fica para a próxima iteração — registrado em ADR 0003.
+// completo fica para a próxima iteração — registrado em ADR 0004.
 package client
 
 import (

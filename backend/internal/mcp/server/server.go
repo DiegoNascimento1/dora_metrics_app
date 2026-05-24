@@ -5,7 +5,7 @@
 // vez de adotar o `modelcontextprotocol/go-sdk` (ainda pré-1.0, churn de
 // API alto). A spec MCP que importa para o MVP cabe em ~250 LOC:
 // `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`.
-// Ver ADR 0003 para o trade-off.
+// Ver ADR 0004 para o trade-off.
 //
 // Auth: Bearer estático via env `MCP_SERVER_TOKEN`. OAuth 2.1 fica para
 // iteração futura.
